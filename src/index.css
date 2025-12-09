@@ -1,44 +1,152 @@
+/* src/index.css */
+
+/* Tailwind layers must be first */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --color-primary-teal: #2ef3d0;
-  --color-primary-blue: #2b8ef7;
-  --color-primary-deep: #1d60bd;
+/* Brand base styles */
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
 
-  --color-bg-main: #04070c;
-  --color-bg-soft: #0d1420;
-  --color-bg-elevated: #111827;
+  /* ----------------------------------------
+   * DEFAULT: INNERNODE NIGHT
+   * Deep navy + teal / blue glow
+   * -------------------------------------- */
+  body {
+    background:
+      radial-gradient(
+        circle at 30% 20%,
+        rgba(0, 255, 200, 0.18), /* teal / greenish glow */
+        transparent 60%
+      ),
+      radial-gradient(
+        circle at 70% 80%,
+        rgba(37, 99, 235, 0.18), /* blue glow */
+        transparent 60%
+      ),
+      #020617; /* deep navy/near-black base */
 
-  --color-text-main: #e9f4ff;
-  --color-text-muted: #9caec4;
-  --color-text-soft: #6b7c8f;
+    background-attachment: fixed;
+    @apply text-slate-50 antialiased;
+  }
 
-  --color-border: #1f2937;
+  button,
+  input,
+  textarea {
+    @apply font-sans;
+  }
 
-  --color-success: #4ade80;
-  --color-warning: #facc15;
-  --color-error: #ef4444;
+  /* =======================================================
+   * THEMES (controlled by classes on <body>)
+   *  - body.theme-innernode-white
+   *  - body.theme-misty-blue
+   * ===================================================== */
 
-  --gradient-primary: linear-gradient(
-    135deg,
-    #2ef3d0 0%,
-    #2b8ef7 40%,
-    #1d60bd 80%
-  );
+  /* ----------------------------------------
+   * Theme 2: InnerNode WHITE
+   * Pure white canvas + logo accent colors
+   * -------------------------------------- */
+  body.theme-innernode-white {
+    background: #ffffff; /* pure white, no overlay */
+    color: #020617;      /* deep slate body text */
+  }
 
-  --shadow-aura: 0 0 20px #2ef3d0, 0 0 40px #2b8ef7;
+  /* Make main shells/cards actually white instead of gray
+     when we’ve used Tailwind bg-slate-* utilities. */
+  body.theme-innernode-white .bg-slate-950,
+  body.theme-innernode-white .bg-slate-900,
+  body.theme-innernode-white .bg-slate-800,
+  body.theme-innernode-white .bg-slate-700 {
+    background-color: #ffffff !important;
+  }
+
+  /* Lighten borders that use dark slate tones */
+  body.theme-innernode-white .border-slate-900,
+  body.theme-innernode-white .border-slate-800,
+  body.theme-innernode-white .border-slate-700 {
+    border-color: #e2e8f0 !important; /* light gray border */
+  }
+
+  /* Accent buttons / pills that currently use cyan/blue still
+     look on-brand against white, so we don’t override them.
+     We only fix text legibility. */
+  body.theme-innernode-white .text-slate-100 {
+    color: #0f172a !important; /* similar to slate-900 */
+  }
+
+  body.theme-innernode-white .text-slate-200 {
+    color: #1f2937 !important; /* similar to slate-800 */
+  }
+
+  /* If we used very soft text for labels, nudge them darker too */
+  body.theme-innernode-white .text-slate-300 {
+    color: #4b5563 !important; /* slate-700-ish */
+  }
+
+  /* ----------------------------------------
+   * Theme 3: Misty Blue Wash
+   * Soft misty aqua/blue background (no glossy gray)
+   * -------------------------------------- */
+  body.theme-misty-blue {
+    background: #dffaff; /* soft light aqua/blue */
+    color: #0f172a;      /* dark slate text */
+  }
+
+  /* Make shells match the misty background instead of dark gray */
+  body.theme-misty-blue .bg-slate-950,
+  body.theme-misty-blue .bg-slate-900,
+  body.theme-misty-blue .bg-slate-800,
+  body.theme-misty-blue .bg-slate-700 {
+    background-color: #e7f4ff !important; /* slightly deeper misty panel */
+  }
+
+  body.theme-misty-blue .border-slate-900,
+  body.theme-misty-blue .border-slate-800,
+  body.theme-misty-blue .border-slate-700 {
+    border-color: #bfdcff !important;
+  }
+
+  /* Text remap for light background */
+  body.theme-misty-blue .text-slate-100 {
+    color: #0f172a !important;
+  }
+
+  body.theme-misty-blue .text-slate-200 {
+    color: #1f2937 !important;
+  }
+
+  body.theme-misty-blue .text-slate-300 {
+    color: #4b5563 !important;
+  }
+
+  /* =======================================================
+   * SHARED LIGHT-THEME FIXES
+   * (apply to both white + misty)
+   * ===================================================== */
+
+  /* On white/misty themes, very dark sidebars can stay dark
+     so the logo still feels grounded; but any “muted” text
+     should not disappear. */
+  body.theme-innernode-white .text-slate-400,
+  body.theme-misty-blue .text-slate-400 {
+    color: #6b7280 !important; /* slate-500 */
+  }
+
+  /* Ensure textarea backgrounds don’t look like dark boxes
+     against the lighter canvases. */
+  body.theme-innernode-white textarea.bg-slate-900,
+  body.theme-innernode-white textarea.bg-slate-800,
+  body.theme-innernode-white textarea.bg-slate-700,
+  body.theme-misty-blue textarea.bg-slate-900,
+  body.theme-misty-blue textarea.bg-slate-800,
+  body.theme-misty-blue textarea.bg-slate-700 {
+    background-color: #f9fafb !important;
+    color: #0f172a !important;
+  }
 }
 
-body {
-  margin: 0;
-  min-height: 100vh;
-  background-color: var(--color-bg-main);
-  color: var(--color-text-main);
-  font-family: Inter, -apple-system, system-ui, "Segoe UI", sans-serif;
-}
-
-#root {
-  min-height: 100vh;
-}
