@@ -1,6 +1,6 @@
 // src/lib/innernodeAiClient.ts
 
-// Basic message shape used by the “AI client”
+// Shared message types for the InnerNode AI calls
 export type InnerNodeRole = "system" | "user" | "assistant";
 
 export type InnerNodeMessage = {
@@ -13,7 +13,7 @@ export type InnerNodeChatOptions = {
    * Hint so we can slightly vary tone depending on where it’s used:
    * - "companion" (InnerNode Companion chat)
    * - "quick_reset" (Equalizer / Quick Reset)
-   * - "lesson" (lesson reflections, later)
+   * - "lesson" (lessons, later)
    */
   modelHint?: "companion" | "quick_reset" | "lesson";
 };
@@ -23,62 +23,41 @@ export type InnerNodeChatResult = {
 };
 
 /**
- * TEMP STUB:
- * This is a local, fake “AI client” so the app feels real during testing
- * WITHOUT needing any secret API keys or a backend.
- *
- * Later, this function is where we’ll plug in:
- * - a Vercel / Supabase Edge Function, or
- * - an internal API that talks to OpenAI / other models securely.
+ * Frontend client → calls our secure backend route /api/innernodeChat
+ * If anything fails (network / 500 / etc), we fall back to a simple,
+ * but still human, message so the app never feels broken.
  */
 export async function callInnerNodeChat(
   messages: InnerNodeMessage[],
   options?: InnerNodeChatOptions
 ): Promise<InnerNodeChatResult> {
-  // Grab the most recent user message (if any)
-  const lastUser = [...messages].reverse().find((m) => m.role === "user");
-  const userText = lastUser?.content?.trim() ?? "";
+  try {
+    const res = await fetch("/api/innernodeChat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages,
+        modelHint: options?.modelHint ?? "companion",
+      }),
+    });
 
-  let prefix: string;
-
-  switch (options?.modelHint) {
-    case "quick_reset":
-      prefix =
-        "Here’s a grounded quick reset reflection based on what you shared:";
-      break;
-    case "lesson":
-      prefix =
-        "Here’s a simple, real-world reflection to go with this lesson:";
-      break;
-    case "companion":
-    default:
-      prefix = "I’m taking in what you just shared.";
-      break;
+    if (res.ok) {
+      const data = await res.json();
+      return { content: data.content as string };
+    } else {
+      console.warn(
+        "[callInnerNodeChat] Non-OK response",
+        res.status,
+        await res.text()
+      );
+    }
+  } catch (err) {
+    console.warn("[callInnerNodeChat] Error talking to backend:", err);
   }
 
-  let body: string;
-
-  if (userText.length > 0) {
-    body = `
-
-I hear you saying: “${userText}”.
-
-You’re not overreacting for feeling this way. Let’s keep it practical:
-
-1. Take one slow breath and notice what part of this feels heaviest right now.
-2. Name one tiny move that would make today **2% easier** (not perfect, just lighter).
-3. If you had to text a trusted friend about this in one sentence, what would you say?
-
-You don’t have to fix everything today. Just pick one small action that matches your current energy.`;
-  } else {
-    body = `
-
-If you want, try typing (or speaking) a bit more about what’s going on so I can respond more specifically. Start with:
-- “Right now I feel…” or
-- “The part that hurts the most is…”`;
-  }
-
+  // Fallback if backend fails for any reason
   return {
-    content: `${prefix} ${body}`,
+    content:
+      "I’m here with you. Something interrupted the deeper reflection on my side, but we can still walk through this together. Tell me a little more about what part feels heaviest.",
   };
 }
