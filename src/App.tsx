@@ -83,7 +83,7 @@ const InnerNodeShell: React.FC = () => {
   return (
     // ⬇️ NOTE: NO bg-* CLASS HERE — background comes from <body> theme
     <div className="min-h-screen flex text-slate-100">
-      {/* Sidebar */}
+      {/* Sidebar – desktop / tablet */}
       <aside className="hidden md:flex w-64 flex-col border-r border-slate-800 bg-slate-950/80 p-4">
         <div className="mb-6">
           <div className="h-9 w-9 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/40">
@@ -97,7 +97,7 @@ const InnerNodeShell: React.FC = () => {
           </p>
         </div>
 
-                <nav className="flex-1 space-y-1 text-xs">
+        <nav className="flex-1 space-y-1 text-xs">
           {/* Core daily flows */}
           <NavLink
             to="/today"
@@ -205,7 +205,6 @@ const InnerNodeShell: React.FC = () => {
           </NavLink>
         </nav>
 
-
         <div className="pt-4 border-t border-slate-800 mt-4 text-[11px] space-y-1">
           {user && (
             <p className="text-slate-400 break-all">
@@ -230,6 +229,9 @@ const InnerNodeShell: React.FC = () => {
             <span className="hidden sm:inline">
               InnerNode · Soft Launch Preview
             </span>
+            <span className="sm:hidden text-[11px] text-cyan-200">
+              InnerNode
+            </span>
           </div>
           <div className="flex items-center gap-3 text-[11px] text-slate-400">
             <span className="rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200">
@@ -237,6 +239,82 @@ const InnerNodeShell: React.FC = () => {
             </span>
           </div>
         </header>
+
+        {/* Mobile nav – only on small screens */}
+        <nav className="md:hidden border-b border-slate-800 bg-slate-950/90 px-2 py-2 flex gap-2 overflow-x-auto text-[11px]">
+          <NavLink
+            to="/today"
+            className={({ isActive }) =>
+              `${navLinkBase} ${
+                isActive
+                  ? "bg-cyan-500 text-slate-950"
+                  : "bg-slate-900 text-slate-200"
+              }`
+            }
+          >
+            Today
+          </NavLink>
+          <NavLink
+            to="/companion"
+            className={({ isActive }) =>
+              `${navLinkBase} ${
+                isActive
+                  ? "bg-cyan-500 text-slate-950"
+                  : "bg-slate-900 text-slate-200"
+              }`
+            }
+          >
+            Companion
+          </NavLink>
+          <NavLink
+            to="/quick-reset"
+            className={({ isActive }) =>
+              `${navLinkBase} ${
+                isActive
+                  ? "bg-cyan-500 text-slate-950"
+                  : "bg-slate-900 text-slate-200"
+              }`
+            }
+          >
+            Reset
+          </NavLink>
+          <NavLink
+            to="/smart-notes"
+            className={({ isActive }) =>
+              `${navLinkBase} ${
+                isActive
+                  ? "bg-cyan-500 text-slate-950"
+                  : "bg-slate-900 text-slate-200"
+              }`
+            }
+          >
+            Notes
+          </NavLink>
+          <NavLink
+            to="/games"
+            className={({ isActive }) =>
+              `${navLinkBase} ${
+                isActive
+                  ? "bg-cyan-500 text-slate-950"
+                  : "bg-slate-900 text-slate-200"
+              }`
+            }
+          >
+            Games
+          </NavLink>
+          <NavLink
+            to="/settings"
+            className={({ isActive }) =>
+              `${navLinkBase} ${
+                isActive
+                  ? "bg-cyan-500 text-slate-950"
+                  : "bg-slate-900 text-slate-200"
+              }`
+            }
+          >
+            Settings
+          </NavLink>
+        </nav>
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto px-4 py-6 md:px-8">
@@ -267,8 +345,8 @@ const App: React.FC = () => {
           <Route path="/" element={<Navigate to="/today" replace />} />
           <Route path="/today" element={<TodayPage />} />
           <Route path="/companion" element={<CompanionPage />} />
-           {/* NEW: “Let InnerNode get to know you” */}
-  <Route path="/get-to-know-you" element={<GetToKnowYouPage />} />
+          {/* “Let InnerNode get to know you” */}
+          <Route path="/get-to-know-you" element={<GetToKnowYouPage />} />
           <Route path="/quick-reset" element={<QuickResetPage />} />
 
           <Route path="/lessons" element={<LessonsPage />} />
