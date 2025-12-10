@@ -1,6 +1,5 @@
 // src/lib/innernodeAiClient.ts
 
-// Shared message types for the InnerNode AI calls
 export type InnerNodeRole = "system" | "user" | "assistant";
 
 export type InnerNodeMessage = {
@@ -9,12 +8,10 @@ export type InnerNodeMessage = {
 };
 
 export type InnerNodeChatOptions = {
-  /**
-   * Hint so we can slightly vary tone depending on where it’s used:
-   * - "companion" (InnerNode Companion chat)
-   * - "quick_reset" (Equalizer / Quick Reset)
-   * - "lesson" (lessons, later)
-   */
+  // Hint so we can vary tone depending on where it’s used
+  // - "companion"  (InnerNode Companion chat)
+  // - "quick_reset" (Equalizer / Quick Reset)
+  // - "lesson"      (lesson reflections)
   modelHint?: "companion" | "quick_reset" | "lesson";
 };
 
@@ -22,42 +19,52 @@ export type InnerNodeChatResult = {
   content: string;
 };
 
-/**
- * Frontend client → calls our secure backend route /api/innernodeChat
- * If anything fails (network / 500 / etc), we fall back to a simple,
- * but still human, message so the app never feels broken.
- */
+function getBaseUrl() {
+  // Browser: use current origin (works on Vercel deployment)
+  if (typeof window !== "undefined") {
+    return window.location.origin;
+  }
+
+  // Server-side / build fallback
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+
+  return "http://localhost:5173";
+}
+
 export async function callInnerNodeChat(
   messages: InnerNodeMessage[],
   options?: InnerNodeChatOptions
 ): Promise<InnerNodeChatResult> {
   try {
-    const res = await fetch("/api/innernodeChat", {
+    const res = await fetch(`${getBaseUrl()}/api/innernodeChat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         messages,
-        modelHint: options?.modelHint ?? "companion",
+        modelHint: options?.modelHint,
       }),
     });
 
-    if (res.ok) {
-      const data = await res.json();
-      return { content: data.content as string };
-    } else {
-      console.warn(
-        "[callInnerNodeChat] Non-OK response",
-        res.status,
-        await res.text()
-      );
+    if (!res.ok) {
+      console.error("[callInnerNodeChat] non-OK status", res.status);
+      throw new Error(`HTTP ${res.status}`);
     }
-  } catch (err) {
-    console.warn("[callInnerNodeChat] Error talking to backend:", err);
-  }
 
-  // Fallback if backend fails for any reason
-  return {
-    content:
-      "I’m here with you. Something interrupted the deeper reflection on my side, but we can still walk through this together. Tell me a little more about what part feels heaviest.",
-  };
+    const data = (await res.json()) as { content?: string };
+
+    if (!data.content) {
+      throw new Error("Missing content from API");
+    }
+
+    return { content: data.content };
+  } catch (err) {
+    console.error("[callInnerNodeChat] error:", err);
+    // Fallback text ONLY if API fails
+    return {
+      content:
+        "I’m here with you. Something interrupted the deeper reflection on my side, but we can still walk through this together. Tell me a little more about what part feels heaviest.",
+    };
+  }
 }
