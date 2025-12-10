@@ -4,10 +4,12 @@ import React, { useEffect, useRef, useState } from "react";
 import { useUserProfile } from "../hooks/useUserProfile";
 import {
   runEqualizerPlaybook,
-  EqualizerResult,
-  EqualizerTone,
+  type EqualizerResult,
+  type EqualizerTone,
 } from "../lib/equalizerPlaybook";
+
 import { speakText } from "../lib/voice";
+
 
 type RecognitionType =
   | (SpeechRecognition & { continuous?: boolean })

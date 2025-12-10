@@ -54,9 +54,7 @@ export type TriggerClassification = {
  *      - more detailed trigger phrase mapping
  *      - or a lightweight ML / LLM call.
  */
-export function classifyEqualizerInput(
-  rawText: string
-): TriggerClassification {
+export function classifyTriggers(rawText: string): TriggerClassification {
   const text = (rawText || "").toLowerCase();
 
   let emotionCluster: EmotionCluster = "unknown";
@@ -90,7 +88,7 @@ export function classifyEqualizerInput(
     emotionCluster = emotionCluster === "anger" ? "mixed" : "fear";
   }
 
-  if (/overwhelmed|too much|can’t handle|breaking down/.test(text)) {
+  if (/overwhelmed|too much|can’t handle|can't handle|breaking down/.test(text)) {
     emotionCluster =
       emotionCluster === "anger" || emotionCluster === "fear"
         ? "mixed"
@@ -142,7 +140,7 @@ export function classifyEqualizerInput(
   }
 
   if (
-    /kill myself|suicide|end it all|don't want to live|don't wanna live|overdose/.test(
+    /kill myself|suicide|end it all|don't want to live|dont want to live|don't wanna live|dont wanna live|overdose/.test(
       text
     )
   ) {
@@ -180,3 +178,4 @@ export function classifyEqualizerInput(
     flags,
   };
 }
+

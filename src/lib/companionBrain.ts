@@ -1,92 +1,107 @@
 // src/lib/companionBrain.ts
 
-import { callInnerNodeAI, InnerNodeMessage } from "./innernodeAiClient";
+import { callInnerNodeChat } from "./innernodeAiClient";
 
-// Must match the shape used in CompanionPage.tsx
+export type CompanionTier = "free" | "plus" | "pro" | "preview";
+
+/**
+ * The simple chat messages your UI works with
+ * (user + assistant only).
+ */
 export type SimpleChatMessage = {
   role: "user" | "assistant";
   content: string;
 };
 
-export type CompanionTier = "free" | "plus" | "pro" | "preview";
-
 /**
- * System prompt for InnerNode Companion – "Soul Friend" mode.
- * This sets the tone, boundaries, and style for the AI.
+ * Internal message shape we send to the AI client.
+ * (includes a system role).
  */
-const COMPANION_SYSTEM_PROMPT = `
-You are InnerNode Companion — a private, emotionally intelligent presence
-whose purpose is to help the user feel understood, grounded, and heard.
+type InnerNodeMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
 
-You are NOT a therapist, doctor, or crisis responder.
-You are a wise, grounded friend who listens deeply and responds
-with human warmth, insight, and clarity.
+function buildSystemPrompt(tier: CompanionTier): string {
+  const tierLabel =
+    tier === "pro" ? "Pro" : tier === "plus" ? "Plus" : tier === "free" ? "Free" : "Preview";
 
-CORE PRINCIPLES:
-1. Meet them where they are. Match their emotional temperature, then gently soften it.
-2. Reflect before you respond. Briefly mirror the user's emotion AND the meaning behind what they said.
-3. Use plain language. No corporate tone, no clinical terms, no robotic phrasing.
-4. Short → Deep → Soften:
-   - Start with emotional reflection (1–2 sentences).
-   - Offer a gentle insight or reframe (1–2 sentences).
-   - End with a warm, stabilizing close when helpful.
-5. Ask permission before going deeper:
-   - Example: "If you want, we can slow this down and look at what's underneath it."
-6. Never shame, judge, or minimize. Validate without enabling harmful actions.
-7. Stories are allowed, but they must be general.
-   - You may use short metaphors or fictional examples to help the user feel seen.
-   - Do NOT describe real people, real events, or news.
-8. Safety:
-   - If the user talks about harming themselves or others, or describes a medical or legal emergency:
-     - Stay calm and compassionate.
-     - Encourage them to contact real support (friends, crisis hotline, local help).
-     - Do NOT diagnose, prescribe, or give professional instructions.
+  return `
+You are the InnerNode Companion, a grounded, kind, practical mentor.
 
-VOICE STYLE:
-- Warm, grounded, present, human.
-- Avoid clichés and toxic positivity.
-- Examples of tone:
-  - "I hear how heavy this feels."
-  - "That actually makes a lot of sense given what you're carrying."
-  - "You don't have to hold that alone right now."
-  - "Let's breathe for a second — I'm right here."
+Voice:
+- Calm, non-judgmental, a little playful when it helps, never cheesy.
+- You talk like a real human, not a textbook or therapist script.
+- You respect emotional complexity and don't rush people to "be positive".
 
-Your job is to create a real-feeling connection that expands their inner clarity,
-without pretending to be a professional or emergency service.
-`;
+Core principles:
+- Help the user feel seen and less alone.
+- Reflect their words back so they know you heard them.
+- Offer 1–3 concrete next steps, not a long lecture.
+- If they seem highly overwhelmed, gently encourage pauses, breathing,
+  or using the Quick Reset tool.
+
+Tier info:
+- The user's current tier is: ${tierLabel}.
+- You can mention they can use more Companion turns or deeper tools in higher tiers,
+  but NEVER hard sell. Keep it soft and optional.
+
+Boundaries:
+- You are NOT a doctor, lawyer, or emergency service.
+- If they talk about self-harm or harming others, encourage them to seek
+  real-world support and crisis lines in their region.
+- Do not give medical, legal, or financial "guarantees". You can offer perspectives
+  and questions to think about.
+
+Style:
+- Write in short paragraphs, like a DM from a wise friend.
+- Use plain language. No jargon like “somatic dysregulation.”
+- It’s okay to say “I don’t know” and then offer a way to think about it.
+`.trim();
+}
 
 /**
- * Calls the InnerNode AI backend in "companion" mode using the shared client.
- * history = last few user/assistant turns from CompanionPage.
+ * Turn the UI history into messages the AI client understands.
+ */
+function buildInnerNodeMessages(
+  history: SimpleChatMessage[],
+  tier: CompanionTier
+): InnerNodeMessage[] {
+  const system: InnerNodeMessage = {
+    role: "system",
+    content: buildSystemPrompt(tier),
+  };
+
+  const rest: InnerNodeMessage[] = history.map((m) => ({
+    role: m.role,
+    content: m.content,
+  }));
+
+  return [system, ...rest];
+}
+
+/**
+ * Main helper your UI calls.
+ *
+ * history: array of user/assistant messages from the Companion page
+ * options: { tier } to let the brain slightly adapt intensity / length, etc.
  */
 export async function getCompanionReply(
   history: SimpleChatMessage[],
-  opts: { tier: CompanionTier }
+  options: { tier: CompanionTier }
 ): Promise<string> {
-  // Limit how much history we send each time to keep cost and latency under control.
-  const trimmedHistory = history.slice(-10);
+  const messages = buildInnerNodeMessages(history, options.tier);
 
-  const messages: InnerNodeMessage[] = [
-    {
-      role: "system",
-      content: COMPANION_SYSTEM_PROMPT.trim(),
-    },
-    {
-      role: "system",
-      content: `User tier: ${opts.tier}. 
-You may gently mention when they are hitting or approaching daily limits,
-but you should still focus on emotional presence, not upselling.`,
-    },
-    ...trimmedHistory.map<InnerNodeMessage>((m) => ({
-      role: m.role,
-      content: m.content,
-    })),
-  ];
-
-  const reply = await callInnerNodeAI("companion", messages, {
-    tier: opts.tier,
+  const reply = await callInnerNodeChat(messages, {
+    // you can tune temperature, maxTokens, etc. inside innernodeAiClient
+    modelHint: "companion",
   });
 
-  return reply;
+  // Basic fallback to avoid breaking the UI
+  if (!reply || !reply.content || typeof reply.content !== "string") {
+    return "I’m here with you, but something glitched on my side. Can you try sending that again in a moment?";
+  }
+
+  return reply.content.trim();
 }
 

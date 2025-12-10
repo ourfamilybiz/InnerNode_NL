@@ -1,250 +1,396 @@
 // src/lib/equalizerPlaybook.ts
 
-import { classifyEqualizerInput, TriggerClassification } from "./equalizerTriggers";
+import {
+  classifyTriggers,
+  type EmotionCluster,
+  type EscalationLevel,
+  type ImpulseType,
+  type TriggerClassification,
+} from "./equalizerTriggers";
 
-export type EqualizerTone =
-  | "gentle"
-  | "neutral"
-  | "direct"
-  | "mentor";
+/**
+ * Which “lane” of the Equalizer we’re in.
+ * This is for your own mental model + future analytics.
+ */
+export type EqualizerLane =
+  | "grounding"
+  | "decision_pause"
+  | "conflict"
+  | "money"
+  | "work"
+  | "relationship"
+  | "safety_redirect"
+  | "emergency_referral";
 
-export type EqualizerInput = {
-  text: string;
-  /**
-   * Coach style we eventually read from user_profiles.coach_style
-   * e.g. 'gentle', 'direct', 'mentor', etc.
-   */
-  userTone?: EqualizerTone | null;
-};
+/**
+ * Tone / persona for the opener line.
+ */
+export type EqualizerIntroTone = "soft" | "direct" | "mentor";
 
-export type EqualizerResult = {
-  mainResponse: string;
-  microPrompt?: string;
-  toneUsed: EqualizerTone;
-  escalationSuggested: boolean;
-  classification: TriggerClassification;
+/**
+ * A step the UI can render in sequence.
+ */
+export type EqualizerStep = {
+  id: string;
+  label: string;
+  body: string;
+  emphasis?: "calm" | "warning" | "normalize" | "plan";
 };
 
 /**
- * Local, deterministic Equalizer logic.
- *
- * NOTE:
- *  - This does NOT call OpenAI yet.
- *  - Your other dev chat can later replace the inside of this function
- *    with a real LLM call that:
- *      • includes `classification`
- *      • includes user tone
- *      • follows the same tone governance rules.
+ * What the Equalizer gives back to the UI.
+ * QuickResetPage.tsx expects this type name: EqualizerResult
  */
-export async function runEqualizerPlaybook(
-  input: EqualizerInput
-): Promise<EqualizerResult> {
-  const text = (input.text || "").trim();
+export type EqualizerResult = {
+  lane: EqualizerLane;
+  escalationLevel: EscalationLevel;
+  emotionCluster: EmotionCluster;
+  impulseType: ImpulseType;
+  introTone: EqualizerIntroTone;
+  introLine: string;
+  steps: EqualizerStep[];
+  // copy-ready strings the UI can show as small suggestions
+  companionSuggestion: string;
+  saveSuggestion: string;
+};
 
-  if (!text) {
-    return {
-      mainResponse:
-        "Tell me what’s happening in this moment — even if it’s messy or you’re not sure how to explain it yet.",
-      microPrompt: "Create space between impulse and action.",
-      toneUsed: input.userTone || "gentle",
-      escalationSuggested: false,
-      classification: classifyEqualizerInput(""),
-    };
-  }
+/**
+ * Main entry point used by QuickResetPage:
+ *  - takes the raw user text
+ *  - classifies it into emotion / impulse / escalation
+ *  - returns a structured script the UI can render
+ */
+export function runEqualizerPlaybook(
+  rawText: string
+): EqualizerResult {
+  const classification: TriggerClassification = classifyTriggers(rawText);
+  const { emotionCluster, impulseType, escalationLevel } = classification;
 
-  const classification = classifyEqualizerInput(text);
-  const userTone: EqualizerTone = input.userTone || "gentle";
+  // Decide lane based on impulse + flags
+  const lane: EqualizerLane = pickLane(classification);
+  const introTone: EqualizerIntroTone = pickIntroTone(
+    emotionCluster,
+    escalationLevel
+  );
+  const introLine = buildIntroLine(lane, introTone);
 
-  // Decide if we need the “firm mentor” override or stay in the user’s chosen tone.
-  let toneUsed: EqualizerTone = userTone;
-  let toneExplainer = "";
+  const steps = buildStepsForLane(lane, classification, rawText);
 
-  if (classification.escalationLevel >= 2 && userTone !== "mentor") {
-    // 🔁 Adaptive Firm Mentor Override (but with explanation) :contentReference[oaicite:2]{index=2}
-    toneUsed = "mentor";
-    toneExplainer =
-      "I’m going to be a little more direct for a moment—not because you’re wrong, but because this moment matters and I want to help you protect yourself. Once we get through this spike, I’ll return to the tone you prefer.\n\n";
-  }
+  const companionSuggestion =
+    escalationLevel >= 2
+      ? "When this settles a bit, tell your Companion what happened so InnerNode can remember this moment and help spot it earlier next time."
+      : "If this still feels heavy after this reset, share the story with your Companion so we can keep it in your history.";
 
-  // Emergency-like content: we keep it very clear and safe.
-  if (classification.escalationLevel === 3) {
-    const mainResponse =
-      toneExplainer +
-      "From what you’ve shared, this sounds bigger than what InnerNode is designed to handle on its own.\n\n" +
-      "If you are in immediate danger or thinking about seriously harming yourself or someone else, please contact emergency services or a local crisis line right now. " +
-      "You don’t have to go through this alone, and real-time human help matters here.\n\n" +
-      "You can still use InnerNode after you’re safe to unpack what led here and to build a different pattern going forward.";
-
-    return {
-      mainResponse,
-      microPrompt: "Your safety comes before any decision or impulse.",
-      toneUsed,
-      escalationSuggested: true,
-      classification,
-    };
-  }
-
-  // Non-emergency: we can respond with a moment-level pause + reflection.
-  const { emotionCluster, impulseType } = classification;
-
-  const emotionLine = buildEmotionLine(emotionCluster);
-  const impulseLine = buildImpulseLine(impulseType);
-  const body = buildCoreBody(toneUsed);
-  const microPrompt = buildMicroPrompt(classification);
-
-  const mainResponse = `${toneExplainer}${emotionLine}${impulseLine}${body}`;
-
-  const escalationSuggested = classification.escalationLevel >= 2;
+  const saveSuggestion =
+    "You can paste the key parts of this into Smart Notes or your Companion so future-you can see how you handled it.";
 
   return {
-    mainResponse,
-    microPrompt,
-    toneUsed,
-    escalationSuggested,
-    classification,
+    lane,
+    escalationLevel,
+    emotionCluster,
+    impulseType,
+    introTone,
+    introLine,
+    steps,
+    companionSuggestion,
+    saveSuggestion,
   };
 }
 
-// ----- helpers -----
+/* ---------------------- Helpers ---------------------- */
 
-function buildEmotionLine(cluster: TriggerClassification["emotionCluster"]): string {
-  switch (cluster) {
-    case "anger":
-      return (
-        "I can hear that something or someone has really pulled you out of character. " +
-        "You’re not wrong for feeling this level of heat — the question is what you want this moment to turn into.\n\n"
-      );
-    case "fear":
-      return (
-        "It sounds like your nervous system is on high alert. " +
-        "Fear is trying to protect you, but it doesn’t always tell the full truth about what has to happen next.\n\n"
-      );
-    case "overwhelm":
-      return (
-        "This feels like a lot coming at you at once. " +
-        "Overwhelm is what happens when your system gets more inputs than it can process in one breath.\n\n"
-      );
-    case "sadness":
-      return (
-        "There’s a heaviness in what you’re sharing. " +
-        "Sadness is valid — it just doesn’t have to make the decisions for you.\n\n"
-      );
-    case "shame":
-      return (
-        "I can hear some shame sitting underneath this. " +
-        "Shame tries to make the whole story about you being ‘wrong’ instead of about what happened.\n\n"
-      );
-    case "numb":
-      return (
-        "Feeling numb or shut down is still a feeling — it’s your system trying to protect itself from too much.\n\n"
-      );
-    case "mixed":
-      return (
-        "It sounds like there are layered emotions here — some anger, some fear, maybe some sadness in the background. " +
-        "We don’t have to untangle them all at once to take a better next step.\n\n"
-      );
-    case "low_intensity":
-      return (
-        "Even if this doesn’t feel like a huge crisis, it still matters that you paused here instead of acting on autopilot.\n\n"
-      );
-    case "unknown":
-    default:
-      return (
-        "Thank you for trusting yourself enough to pause here instead of just doing the first thing that came to mind.\n\n"
-      );
+function pickLane(c: TriggerClassification): EqualizerLane {
+  const { impulseType, flags, emotionCluster } = c;
+
+  if (c.escalationLevel === 3) {
+    return "emergency_referral";
   }
+
+  if (flags.moneyRisk) return "money";
+  if (flags.workRisk) return "work";
+  if (flags.relationshipRisk) return "relationship";
+
+  if (impulseType === "show_up") return "conflict";
+  if (impulseType === "send" || impulseType === "say") return "decision_pause";
+
+  if (emotionCluster === "overwhelm" || emotionCluster === "numb") {
+    return "grounding";
+  }
+
+  // Default: a general grounding/decision pause
+  return "grounding";
 }
 
-function buildImpulseLine(impulse: ImpulseType): string {
-  switch (impulse) {
-    case "say":
-      return (
-        "Right now the impulse seems to be about what to say or how to go off. " +
-        "Words can’t be unsent once they land, so let’s slow this just enough to protect your future self.\n\n"
-      );
-    case "send":
-      return (
-        "You’re close to hitting send or posting something. " +
-        "Screens make it feel small, but the impact can be big. Let’s treat this like a real-world move, not just a button.\n\n"
-      );
-    case "spend":
-      return (
-        "I’m hearing a pull toward spending or a big money move. " +
-        "Money decisions made in a spike often feel different once your nervous system is quieter.\n\n"
-      );
-    case "show_up":
-      return (
-        "There’s an urge to physically show up, drive over, or pull up. " +
-        "Showing up in a spike can change stories in ways that are hard to undo later.\n\n"
-      );
-    case "self_harm":
-    case "harm_other":
-    case "legal_risk":
-    case "sexual_risk":
-      // Level 3 cases are handled earlier; this is just a soft backup.
-      return (
-        "The action you’re considering touches your safety, your body, or your future in a serious way. " +
-        "That alone makes this pause incredibly important.\n\n"
-      );
-    case "unknown":
-    case null:
-    default:
-      return "";
-  }
+function pickIntroTone(
+  emotionCluster: EmotionCluster,
+  escalationLevel: EscalationLevel
+): EqualizerIntroTone {
+  if (escalationLevel >= 3) return "direct";
+  if (emotionCluster === "anger") return "direct";
+  if (emotionCluster === "shame") return "soft";
+  return "mentor";
 }
 
-function buildCoreBody(tone: EqualizerTone): string {
+function buildIntroLine(
+  lane: EqualizerLane,
+  tone: EqualizerIntroTone
+): string {
+  if (lane === "emergency_referral") {
+    return "This sounds serious enough that I want to slow you down and point you toward real-world help.";
+  }
+
   const base =
-    "For the next few breaths, nothing needs to happen yet. " +
-    "We’re just building a little space between how you feel and what you do.\n\n";
+    tone === "soft"
+      ? "First, breathe with me for a second. You’re allowed to pause before you choose your next move."
+      : tone === "direct"
+      ? "Hold up. Three seconds right here can change the next three years."
+      : "Let’s zoom out for just a moment and see what’s really happening before you react.";
 
-  const gentle =
-    "Let’s try something small:\n" +
-    "• Take one slow inhale through your nose for a count of 4.\n" +
-    "• Hold for 2.\n" +
-    "• Exhale slowly for a count of 6.\n\n" +
-    "Now, if you imagine your future self a few hours or days from now, what would they be most grateful you did or did NOT do in this moment?\n\n";
+  if (lane === "money") {
+    return (
+      base +
+      " This sounds like a money decision that future-you has to live with."
+    );
+  }
+  if (lane === "work") {
+    return base + " This feels work-heavy, and your livelihood matters.";
+  }
+  if (lane === "relationship") {
+    return base + " This sounds like it touches your heart and your people.";
+  }
+  if (lane === "conflict") {
+    return base + " I hear a lot of charged energy between you and someone else.";
+  }
 
-  const neutral =
-    "You can jot a quick sentence right after this: “If I act on this impulse, what do I gain, and what do I put at risk?”\n\n" +
-    "We’re not forcing you toward a ‘good’ choice — we’re helping you make a clearer one.\n\n";
+  return base;
+}
 
-  const direct =
-    "This is one of those moments where a 5-minute pause can save you 5 months of fallout.\n\n" +
-    "Before you move, ask yourself: “If this plays out the way my worst-case fear imagines, is that a risk I can live with?”\n\n";
+function buildStepsForLane(
+  lane: EqualizerLane,
+  c: TriggerClassification,
+  rawText: string
+): EqualizerStep[] {
+  if (lane === "emergency_referral") {
+    return buildEmergencySteps(rawText);
+  }
 
-  const mentor =
-    "Right now, your power is not in the next move — it’s in your ability to NOT make the move while you’re flooded.\n\n" +
-    "Let’s treat this like a rep: you just practiced a pause. That’s a skill that changes whole storylines when you keep using it.\n\n";
-
-  switch (tone) {
-    case "gentle":
-      return base + gentle;
-    case "neutral":
-      return base + neutral;
-    case "direct":
-      return base + direct;
-    case "mentor":
-      return base + mentor;
+  switch (lane) {
+    case "money":
+      return buildMoneySteps(c, rawText);
+    case "work":
+      return buildWorkSteps(c, rawText);
+    case "relationship":
+      return buildRelationshipSteps(c, rawText);
+    case "conflict":
+      return buildConflictSteps(c, rawText);
+    case "decision_pause":
+      return buildDecisionPauseSteps(c, rawText);
+    case "grounding":
     default:
-      return base + gentle;
+      return buildGroundingSteps(c, rawText);
   }
 }
 
-function buildMicroPrompt(classification: TriggerClassification): string {
-  if (classification.escalationLevel >= 2) {
-    return "Slow the moment before it decides for you.";
-  }
-  switch (classification.emotionCluster) {
-    case "anger":
-      return "Nothing needs to happen in the next 60 seconds. Let’s cool your nervous system first.";
-    case "overwhelm":
-      return "Create space between impulse and action.";
-    case "fear":
-      return "You don’t have to act on a feeling to respect it.";
-    default:
-      return "This is your pause. You don’t need to decide yet.";
-  }
+/* ---------------- Lane-specific builders ---------------- */
+
+function buildEmergencySteps(rawText: string): EqualizerStep[] {
+  return [
+    {
+      id: "check-safety-now",
+      label: "1. Check real-world safety first.",
+      emphasis: "warning",
+      body:
+        "If you are in immediate danger, or someone else is, please stop reading this and call your local emergency number, crisis line, or someone you trust right now. This app is a support tool, not a replacement for emergency help.",
+    },
+    {
+      id: "remove-tools",
+      label: "2. Put time and distance between you and any tool for harm.",
+      emphasis: "plan",
+      body:
+        "If there’s a weapon, pills, keys to a car, or anything you could use to hurt yourself or someone else, move away from it or ask someone to hold it. Even a few extra seconds of distance makes it harder to act on an impulse.",
+    },
+    {
+      id: "reach-human",
+      label: "3. Bring one safe human into the moment.",
+      emphasis: "calm",
+      body:
+        "You don’t have to explain everything. A simple: “I’m not okay and I need you to stay with me” is enough. If you don’t have someone available, calling a crisis line or local helpline counts as bringing a human in.",
+    },
+  ];
+}
+
+function buildGroundingSteps(
+  c: TriggerClassification,
+  rawText: string
+): EqualizerStep[] {
+  return [
+    {
+      id: "body-check",
+      label: "1. Do a quick body check.",
+      emphasis: "calm",
+      body:
+        "Notice your jaw, shoulders, chest, and hands. See if you can soften each one by just 10%. No perfection — just loosening the grip a little.",
+    },
+    {
+      id: "name-it",
+      label: "2. Name what this moment feels like.",
+      emphasis: "normalize",
+      body:
+        "You might say: “Right now I feel anxious and overloaded,” or “I feel blank and checked out.” Naming it doesn’t fix it, but it stops your brain from running on autopilot.",
+    },
+    {
+      id: "tiny-next-step",
+      label: "3. Choose a tiny, non-dramatic next step.",
+      emphasis: "plan",
+      body:
+        "Instead of re-writing your whole life tonight, pick one small thing: drink water, step outside for 2 minutes, or message someone safe. Tiny steps keep you moving without burning you out.",
+    },
+  ];
+}
+
+function buildDecisionPauseSteps(
+  c: TriggerClassification,
+  rawText: string
+): EqualizerStep[] {
+  return [
+    {
+      id: "pause-before-send",
+      label: "1. Put a literal pause between you and the button.",
+      emphasis: "warning",
+      body:
+        "If this is about sending, posting, or calling, move your finger away from the button. You are not required to respond at the speed of your emotions.",
+    },
+    {
+      id: "future-you",
+      label: "2. Ask: “What would calm-but-honest me want here?”",
+      emphasis: "plan",
+      body:
+        "Close your eyes and imagine you after a good night’s rest, having already handled this well. What would *that* version of you want to say or do? You don’t have to know perfectly — just aim closer to that version by 10–20%.",
+    },
+    {
+      id: "draft-instead",
+      label: "3. Turn this into a draft, not a decision.",
+      emphasis: "normalize",
+      body:
+        "If you need to get the words out, write them in Smart Notes or to your Companion instead of the person. You can decide tomorrow what actually needs to be sent.",
+    },
+  ];
+}
+
+function buildConflictSteps(
+  c: TriggerClassification,
+  rawText: string
+): EqualizerStep[] {
+  return [
+    {
+      id: "space-and-distance",
+      label: "1. Create space before contact.",
+      emphasis: "warning",
+      body:
+        "If you’re tempted to pull up, confront, or “teach a lesson,” give yourself distance. Physical distance is emotional oxygen.",
+    },
+    {
+      id: "what-matters",
+      label: "2. Decide what actually matters here.",
+      emphasis: "plan",
+      body:
+        "Ask yourself: “In three days, what will I care about — being right, being safe, or being at peace?” Let that answer guide how much energy this gets.",
+    },
+    {
+      id: "safe-outlet",
+      label: "3. Use a safe outlet first.",
+      emphasis: "calm",
+      body:
+        "Vent to your Companion, a note, or someone you trust before you face the person. Raw emotion deserves a safe landing pad, not a stage.",
+    },
+  ];
+}
+
+function buildMoneySteps(
+  c: TriggerClassification,
+  rawText: string
+): EqualizerStep[] {
+  return [
+    {
+      id: "money-pause",
+      label: "1. Turn this from “now” money into “tomorrow” money.",
+      emphasis: "warning",
+      body:
+        "Unless this is rent, food, or safety, almost no purchase is truly emergency-level. Waiting 24 hours rarely costs you anything, but it often saves you a lot.",
+    },
+    {
+      id: "check-reason",
+      label: "2. Ask what you’re really trying to buy.",
+      emphasis: "normalize",
+      body:
+        "Are you buying relief, status, comfort, distraction, or proof that you’re okay? Once you name that, you can decide if there’s a cheaper, kinder way to get it.",
+    },
+    {
+      id: "tiny-yes",
+      label: "3. Make a smaller “yes” if you still want to move.",
+      emphasis: "plan",
+      body:
+        "Instead of the full amount or big leap, pick a test version: a smaller cart, a trial, or a delay. Money decisions feel better when they leave options open.",
+    },
+  ];
+}
+
+function buildWorkSteps(
+  c: TriggerClassification,
+  rawText: string
+): EqualizerStep[] {
+  return [
+    {
+      id: "no-quit-in-peak",
+      label: "1. Don’t quit in the peak of the feeling.",
+      emphasis: "warning",
+      body:
+        "You’re allowed to change jobs or set boundaries — just don’t let the worst 5 minutes decide the next 5 years.",
+    },
+    {
+      id: "separate-person-from-system",
+      label: "2. Separate the person from the whole system.",
+      emphasis: "normalize",
+      body:
+        "One bad boss, client, or coworker is not the whole story of your skills or worth. Naming that keeps your power from shrinking to one moment.",
+    },
+    {
+      id: "micro-plan",
+      label: "3. Make a micro-plan, not a dramatic exit.",
+      emphasis: "plan",
+      body:
+        "Write down one next step you can take in the next 7 days: update your resume, schedule a conversation, or document what’s happening. Tiny moves beat rage-quits.",
+    },
+  ];
+}
+
+function buildRelationshipSteps(
+  c: TriggerClassification,
+  rawText: string
+): EqualizerStep[] {
+  return [
+    {
+      id: "protect-self-first",
+      label: "1. Protect your safety and dignity first.",
+      emphasis: "warning",
+      body:
+        "If you feel unsafe physically or emotionally, your first job is distance and support — not fixing their feelings.",
+    },
+    {
+      id: "name-pattern",
+      label: "2. Name the pattern, not just the incident.",
+      emphasis: "normalize",
+      body:
+        "Ask yourself: “Have I felt this exact way with them before?” If yes, this is about a cycle, not a single argument. That insight alone can change how you move.",
+    },
+    {
+      id: "future-scene",
+      label: "3. Picture the scene you’d be proud of later.",
+      emphasis: "plan",
+      body:
+        "Imagine a future you telling this story saying, “Here’s how I chose myself *and* stayed in my character.” What does that version of you do next?",
+    },
+  ];
 }
 
 

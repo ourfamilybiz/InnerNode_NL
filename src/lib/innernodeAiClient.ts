@@ -1,7 +1,6 @@
 // src/lib/innernodeAiClient.ts
 
-export type InnerNodeMode = "companion" | "equalizer";
-
+// Basic message shape used by the “AI client”
 export type InnerNodeRole = "system" | "user" | "assistant";
 
 export type InnerNodeMessage = {
@@ -9,51 +8,77 @@ export type InnerNodeMessage = {
   content: string;
 };
 
-export type InnerNodeAIRequest = {
-  mode: InnerNodeMode;
-  messages: InnerNodeMessage[];
-  extraContext?: Record<string, any>;
+export type InnerNodeChatOptions = {
+  /**
+   * Hint so we can slightly vary tone depending on where it’s used:
+   * - "companion" (InnerNode Companion chat)
+   * - "quick_reset" (Equalizer / Quick Reset)
+   * - "lesson" (lesson reflections, later)
+   */
+  modelHint?: "companion" | "quick_reset" | "lesson";
 };
 
-export type InnerNodeAIResponse = {
-  reply: string;
+export type InnerNodeChatResult = {
+  content: string;
 };
 
 /**
- * Frontend helper that calls your backend at /api/innernode-ai.
- * The backend will actually talk to OpenAI using your secret key.
+ * TEMP STUB:
+ * This is a local, fake “AI client” so the app feels real during testing
+ * WITHOUT needing any secret API keys or a backend.
+ *
+ * Later, this function is where we’ll plug in:
+ * - a Vercel / Supabase Edge Function, or
+ * - an internal API that talks to OpenAI / other models securely.
  */
-export async function callInnerNodeAI(
-  mode: InnerNodeMode,
+export async function callInnerNodeChat(
   messages: InnerNodeMessage[],
-  extraContext: Record<string, any> = {}
-): Promise<string> {
-  const payload: InnerNodeAIRequest = {
-    mode,
-    messages,
-    extraContext,
+  options?: InnerNodeChatOptions
+): Promise<InnerNodeChatResult> {
+  // Grab the most recent user message (if any)
+  const lastUser = [...messages].reverse().find((m) => m.role === "user");
+  const userText = lastUser?.content?.trim() ?? "";
+
+  let prefix: string;
+
+  switch (options?.modelHint) {
+    case "quick_reset":
+      prefix =
+        "Here’s a grounded quick reset reflection based on what you shared:";
+      break;
+    case "lesson":
+      prefix =
+        "Here’s a simple, real-world reflection to go with this lesson:";
+      break;
+    case "companion":
+    default:
+      prefix = "I’m taking in what you just shared.";
+      break;
+  }
+
+  let body: string;
+
+  if (userText.length > 0) {
+    body = `
+
+I hear you saying: “${userText}”.
+
+You’re not overreacting for feeling this way. Let’s keep it practical:
+
+1. Take one slow breath and notice what part of this feels heaviest right now.
+2. Name one tiny move that would make today **2% easier** (not perfect, just lighter).
+3. If you had to text a trusted friend about this in one sentence, what would you say?
+
+You don’t have to fix everything today. Just pick one small action that matches your current energy.`;
+  } else {
+    body = `
+
+If you want, try typing (or speaking) a bit more about what’s going on so I can respond more specifically. Start with:
+- “Right now I feel…” or
+- “The part that hurts the most is…”`;
+  }
+
+  return {
+    content: `${prefix} ${body}`,
   };
-
-  const res = await fetch("/api/innernode-ai", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    console.error("[InnerNodeAI] HTTP error:", res.status, text);
-    throw new Error("InnerNode AI request failed");
-  }
-
-  const data = (await res.json()) as InnerNodeAIResponse;
-
-  if (!data || typeof data.reply !== "string") {
-    console.error("[InnerNodeAI] Invalid response payload:", data);
-    throw new Error("InnerNode AI: invalid response payload");
-  }
-
-  return data.reply;
 }
