@@ -1,10 +1,5 @@
 // api/innernodeChat.ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import OpenAI from "openai";
-
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 type InnerNodeRole = "system" | "user" | "assistant";
 
@@ -64,6 +59,17 @@ export default async function handler(
     return;
   }
 
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    console.error("[innernodeChat] Missing OPENAI_API_KEY env var");
+    res.status(500).json({
+      error: "InnerNode had trouble responding. Try again soon.",
+      detail: "OPENAI_API_KEY is not set on the server.",
+    });
+    return;
+  }
+
   try {
     const body = req.body as InnerNodeChatBody;
 
@@ -74,32 +80,52 @@ export default async function handler(
 
     const systemPrompt = buildSystemPrompt(body.modelHint);
 
-    const messagesForModel = [
-      { role: "system" as const, content: systemPrompt },
+    const messagesForModel: InnerNodeMessage[] = [
+      { role: "system", content: systemPrompt },
       ...body.messages,
     ];
 
-    const completion = await client.chat.completions.create({
-      model: "gpt-4.1-mini",
-      messages: messagesForModel,
-      temperature: 0.7,
-      max_tokens: 400,
+    // --- Plain fetch to OpenAI Chat Completions ---
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4.1-mini",
+        messages: messagesForModel,
+        temperature: 0.7,
+        max_tokens: 400,
+      }),
     });
 
-    const content =
-      completion.choices[0]?.message?.content?.trim() ??
+    const data: any = await response.json();
+
+    if (!response.ok) {
+      console.error("[innernodeChat] OpenAI error:", data);
+      res.status(500).json({
+        error: "InnerNode had trouble responding. Try again soon.",
+        detail:
+          data?.error?.message ??
+          data?.message ??
+          JSON.stringify(data ?? {}),
+      });
+      return;
+    }
+
+    const content: string =
+      data?.choices?.[0]?.message?.content?.trim() ??
       "I’m here with you. Something glitched on my side—try again in a moment.";
 
     res.status(200).json({ content });
   } catch (err: any) {
-    // 👇 extra logging + detail in response so we can see the real problem
     console.error("[innernodeChat] error:", err);
-
     res.status(500).json({
       error: "InnerNode had trouble responding. Try again soon.",
       detail:
         err?.message ??
-        (typeof err === "string" ? err : JSON.stringify(err)),
+        (typeof err === "string" ? err : JSON.stringify(err ?? {})),
     });
   }
 }
