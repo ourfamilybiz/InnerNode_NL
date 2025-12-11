@@ -2,9 +2,14 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import OpenAI from "openai";
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const apiKey = process.env.OPENAI_API_KEY;
+
+// Log once at cold start if the key is missing
+if (!apiKey) {
+  console.error("[innernodeChat] OPENAI_API_KEY is not set in environment");
+}
+
+const client = apiKey ? new OpenAI({ apiKey }) : null;
 
 type InnerNodeRole = "system" | "user" | "assistant";
 
@@ -64,14 +69,32 @@ export default async function handler(
     return;
   }
 
+  if (!client) {
+    // Config issue – no key in env
+    res.status(500).json({
+      error: "OPENAI_API_KEY is not configured on the server.",
+    });
+    return;
+  }
+
+  let body: InnerNodeChatBody;
   try {
-    const body = req.body as InnerNodeChatBody;
+    body =
+      typeof req.body === "string"
+        ? (JSON.parse(req.body) as InnerNodeChatBody)
+        : (req.body as InnerNodeChatBody);
+  } catch (e) {
+    console.error("[innernodeChat] Invalid JSON body", e, req.body);
+    res.status(400).json({ error: "Invalid JSON body" });
+    return;
+  }
 
-    if (!body?.messages || !Array.isArray(body.messages)) {
-      res.status(400).json({ error: "Missing messages array" });
-      return;
-    }
+  if (!body?.messages || !Array.isArray(body.messages)) {
+    res.status(400).json({ error: "Missing messages array" });
+    return;
+  }
 
+  try {
     const systemPrompt = buildSystemPrompt(body.modelHint);
 
     const messagesForModel = [
@@ -80,7 +103,8 @@ export default async function handler(
     ];
 
     const completion = await client.chat.completions.create({
-      model: "gpt-4.1-mini",
+      // Use a very broadly-available model
+      model: "gpt-4o-mini",
       messages: messagesForModel,
       temperature: 0.7,
       max_tokens: 400,
@@ -88,13 +112,13 @@ export default async function handler(
 
     const content =
       completion.choices[0]?.message?.content?.trim() ??
-      "I’m here with you. Something glitched on my side—try asking again in a moment.";
+      "I’m here with you. Something glitched on my side—try again in a moment.";
 
     res.status(200).json({ content });
   } catch (err) {
     console.error("[innernodeChat] error:", err);
-    res
-      .status(500)
-      .json({ error: "InnerNode had trouble responding. Try again soon." });
+    res.status(500).json({
+      error: "InnerNode had trouble responding. Try again soon.",
+    });
   }
 }
