@@ -1,5 +1,10 @@
 // api/innernodeChat.ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 type InnerNodeRole = "system" | "user" | "assistant";
 
@@ -12,6 +17,15 @@ type InnerNodeChatBody = {
   messages: InnerNodeMessage[];
   modelHint?: "companion" | "quick_reset" | "lesson";
 };
+
+// 🔹 Small helper to attach CORS headers
+function setCorsHeaders(res: VercelResponse) {
+  // For testing, we’ll allow all origins.
+  // Later you can tighten this to just your domains.
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+}
 
 function buildSystemPrompt(modelHint?: string): string {
   if (modelHint === "quick_reset") {
@@ -54,19 +68,17 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ) {
-  if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
+  // Always set CORS headers
+  setCorsHeaders(res);
+
+  // Handle preflight
+  if (req.method === "OPTIONS") {
+    res.status(200).end();
     return;
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
-
-  if (!apiKey) {
-    console.error("[innernodeChat] Missing OPENAI_API_KEY env var");
-    res.status(500).json({
-      error: "InnerNode had trouble responding. Try again soon.",
-      detail: "OPENAI_API_KEY is not set on the server.",
-    });
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
     return;
   }
 
@@ -80,52 +92,28 @@ export default async function handler(
 
     const systemPrompt = buildSystemPrompt(body.modelHint);
 
-    const messagesForModel: InnerNodeMessage[] = [
-      { role: "system", content: systemPrompt },
+    const messagesForModel = [
+      { role: "system" as const, content: systemPrompt },
       ...body.messages,
     ];
 
-    // --- Plain fetch to OpenAI Chat Completions ---
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4.1-mini",
-        messages: messagesForModel,
-        temperature: 0.7,
-        max_tokens: 400,
-      }),
+    const completion = await client.chat.completions.create({
+      model: "gpt-4.1-mini",
+      messages: messagesForModel,
+      temperature: 0.7,
+      max_tokens: 400,
     });
 
-    const data: any = await response.json();
-
-    if (!response.ok) {
-      console.error("[innernodeChat] OpenAI error:", data);
-      res.status(500).json({
-        error: "InnerNode had trouble responding. Try again soon.",
-        detail:
-          data?.error?.message ??
-          data?.message ??
-          JSON.stringify(data ?? {}),
-      });
-      return;
-    }
-
-    const content: string =
-      data?.choices?.[0]?.message?.content?.trim() ??
+    const content =
+      completion.choices[0]?.message?.content?.trim() ??
       "I’m here with you. Something glitched on my side—try again in a moment.";
 
     res.status(200).json({ content });
-  } catch (err: any) {
+  } catch (err) {
     console.error("[innernodeChat] error:", err);
-    res.status(500).json({
-      error: "InnerNode had trouble responding. Try again soon.",
-      detail:
-        err?.message ??
-        (typeof err === "string" ? err : JSON.stringify(err ?? {})),
-    });
+    res
+      .status(500)
+      .json({ error: "InnerNode had trouble responding. Try again soon." });
   }
 }
+
