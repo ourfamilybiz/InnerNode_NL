@@ -70,7 +70,6 @@ export default async function handler(
   }
 
   if (!client) {
-    // Config issue – no key in env
     res.status(500).json({
       error: "OPENAI_API_KEY is not configured on the server.",
     });
@@ -103,7 +102,6 @@ export default async function handler(
     ];
 
     const completion = await client.chat.completions.create({
-      // Use a very broadly-available model
       model: "gpt-4o-mini",
       messages: messagesForModel,
       temperature: 0.7,
@@ -112,13 +110,21 @@ export default async function handler(
 
     const content =
       completion.choices[0]?.message?.content?.trim() ??
-      "I’m here with you. Something glitched on my side—try again in a moment.";
+      "I’m here with you. Something glitched on my side—try asking again in a moment.";
 
     res.status(200).json({ content });
-  } catch (err) {
+  } catch (err: any) {
     console.error("[innernodeChat] error:", err);
+
+    // Try to surface the real reason
+    const detail =
+      err?.message ||
+      err?.toString?.() ||
+      "Unknown error from OpenAI or server";
+
     res.status(500).json({
       error: "InnerNode had trouble responding. Try again soon.",
+      detail,
     });
   }
 }
