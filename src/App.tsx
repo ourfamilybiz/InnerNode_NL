@@ -1,23 +1,14 @@
 // src/App.tsx
-import TestingInfoPage from "./pages/TestingInfoPage";
-import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
-import UpdatePasswordPage from "./pages/auth/UpdatePasswordPage";
-import PreferencesPage from "./pages/PreferencesPage";
-
 import React from "react";
-import {
-  Routes,
-  Route,
-  Navigate,
-  Outlet,
-  NavLink,
-} from "react-router-dom";
+import { Routes, Route, Navigate, Outlet, NavLink } from "react-router-dom";
 
 import { useAuth } from "./context/AuthContext";
 import { useUserProfile } from "./hooks/useUserProfile";
 
 import LoginPage from "./pages/auth/LoginPage";
 import SignupPage from "./pages/auth/SignupPage";
+import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
+import UpdatePasswordPage from "./pages/auth/UpdatePasswordPage";
 
 import TodayPage from "./pages/TodayPage";
 import CompanionPage from "./pages/CompanionPage";
@@ -30,6 +21,9 @@ import GamesPage from "./pages/GamesPage";
 import FocusPage from "./pages/FocusPage";
 import SettingsPage from "./pages/SettingsPage";
 import SupportPage from "./pages/SupportPage";
+
+import TestingInfoPage from "./pages/TestingInfoPage";
+import PreferencesPage from "./pages/PreferencesPage";
 
 import OnboardingStartPage from "./pages/onboarding/OnboardingStartPage";
 import OnboardingTermsPage from "./pages/onboarding/OnboardingTermsPage";
@@ -103,15 +97,30 @@ const InnerNodeShell: React.FC = () => {
 
         <nav className="flex-1 space-y-1 text-xs">
           {/* Core daily flows */}
-          <NavLink to="/today" className={({ isActive }) => `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`}>
+          <NavLink
+            to="/today"
+            className={({ isActive }) =>
+              `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`
+            }
+          >
             <span>Today</span>
           </NavLink>
 
-          <NavLink to="/companion" className={({ isActive }) => `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`}>
+          <NavLink
+            to="/companion"
+            className={({ isActive }) =>
+              `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`
+            }
+          >
             <span>Companion</span>
           </NavLink>
 
-          <NavLink to="/quick-reset" className={({ isActive }) => `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`}>
+          <NavLink
+            to="/quick-reset"
+            className={({ isActive }) =>
+              `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`
+            }
+          >
             <span>Quick Reset</span>
           </NavLink>
 
@@ -120,19 +129,39 @@ const InnerNodeShell: React.FC = () => {
             Growth
           </div>
 
-          <NavLink to="/lessons" className={({ isActive }) => `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`}>
+          <NavLink
+            to="/lessons"
+            className={({ isActive }) =>
+              `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`
+            }
+          >
             <span>Lessons</span>
           </NavLink>
 
-          <NavLink to="/analytics" className={({ isActive }) => `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`}>
+          <NavLink
+            to="/analytics"
+            className={({ isActive }) =>
+              `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`
+            }
+          >
             <span>Analytics</span>
           </NavLink>
 
-          <NavLink to="/games" className={({ isActive }) => `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`}>
+          <NavLink
+            to="/games"
+            className={({ isActive }) =>
+              `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`
+            }
+          >
             <span>Brain Games</span>
           </NavLink>
 
-          <NavLink to="/focus" className={({ isActive }) => `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`}>
+          <NavLink
+            to="/focus"
+            className={({ isActive }) =>
+              `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`
+            }
+          >
             <span>Focus Lanes</span>
           </NavLink>
 
@@ -141,7 +170,12 @@ const InnerNodeShell: React.FC = () => {
             Life Logistics
           </div>
 
-          <NavLink to="/smart-notes" className={({ isActive }) => `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`}>
+          <NavLink
+            to="/smart-notes"
+            className={({ isActive }) =>
+              `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`
+            }
+          >
             <span>Smart Notes</span>
           </NavLink>
 
@@ -150,23 +184,33 @@ const InnerNodeShell: React.FC = () => {
             System
           </div>
 
-          <NavLink to="/settings" className={({ isActive }) => `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`}>
-            <span>Settings & FAQ</span>
+          <NavLink
+            to="/settings"
+            className={({ isActive }) =>
+              `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`
+            }
+          >
+            <span>Settings &amp; FAQ</span>
           </NavLink>
-<NavLink
-  to="/preferences"
-  className={({ isActive }) =>
-    `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`
-  }
->
-  <span>Preferences</span>
-</NavLink>
 
-          <NavLink to="/support" className={({ isActive }) => `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`}>
+          <NavLink
+            to="/preferences"
+            className={({ isActive }) =>
+              `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`
+            }
+          >
+            <span>Preferences</span>
+          </NavLink>
+
+          <NavLink
+            to="/support"
+            className={({ isActive }) =>
+              `${navLinkBase} ${isActive ? navLinkActive : navLinkInactive}`
+            }
+          >
             <span>Support</span>
           </NavLink>
 
-          {/* ⭐ NEW — Testing Info Link */}
           <NavLink
             to="/testing-info"
             className={({ isActive }) =>
@@ -194,7 +238,9 @@ const InnerNodeShell: React.FC = () => {
         {/* Top bar */}
         <header className="h-12 border-b border-slate-800 bg-slate-950/80 backdrop-blur flex items-center justify-between px-4">
           <div className="flex items-center gap-2 text-xs text-slate-400">
-            <span className="hidden sm:inline">InnerNode · Soft Launch Preview</span>
+            <span className="hidden sm:inline">
+              InnerNode · Soft Launch Preview
+            </span>
             <span className="sm:hidden text-[11px] text-cyan-200">InnerNode</span>
           </div>
           <div className="flex items-center gap-3 text-[11px] text-slate-400">
@@ -206,37 +252,110 @@ const InnerNodeShell: React.FC = () => {
 
         {/* Mobile nav */}
         <nav className="md:hidden border-b border-slate-800 bg-slate-950/90 px-2 py-2 flex gap-2 overflow-x-auto text-[11px]">
-          <NavLink to="/today" className={({ isActive }) => `${navLinkBase} ${isActive ? "bg-cyan-500 text-slate-950" : "bg-slate-900 text-slate-200"}`}>
+          <NavLink
+            to="/today"
+            className={({ isActive }) =>
+              `${navLinkBase} ${
+                isActive
+                  ? "bg-cyan-500 text-slate-950"
+                  : "bg-slate-900 text-slate-200"
+              }`
+            }
+          >
             Today
           </NavLink>
-          <NavLink to="/companion" className={({ isActive }) => `${navLinkBase} ${isActive ? "bg-cyan-500 text-slate-950" : "bg-slate-900 text-slate-200"}`}>
+
+          <NavLink
+            to="/companion"
+            className={({ isActive }) =>
+              `${navLinkBase} ${
+                isActive
+                  ? "bg-cyan-500 text-slate-950"
+                  : "bg-slate-900 text-slate-200"
+              }`
+            }
+          >
             Companion
           </NavLink>
-          <NavLink to="/quick-reset" className={({ isActive }) => `${navLinkBase} ${isActive ? "bg-cyan-500 text-slate-950" : "bg-slate-900 text-slate-200"}`}>
+
+          <NavLink
+            to="/quick-reset"
+            className={({ isActive }) =>
+              `${navLinkBase} ${
+                isActive
+                  ? "bg-cyan-500 text-slate-950"
+                  : "bg-slate-900 text-slate-200"
+              }`
+            }
+          >
             Reset
           </NavLink>
-          <NavLink to="/smart-notes" className={({ isActive }) => `${navLinkBase} ${isActive ? "bg-cyan-500 text-slate-950" : "bg-slate-900 text-slate-200"}`}>
+
+          <NavLink
+            to="/smart-notes"
+            className={({ isActive }) =>
+              `${navLinkBase} ${
+                isActive
+                  ? "bg-cyan-500 text-slate-950"
+                  : "bg-slate-900 text-slate-200"
+              }`
+            }
+          >
             Notes
           </NavLink>
-          <NavLink to="/games" className={({ isActive }) => `${navLinkBase} ${isActive ? "bg-cyan-500 text-slate-950" : "bg-slate-900 text-slate-200"}`}>
+
+          <NavLink
+            to="/games"
+            className={({ isActive }) =>
+              `${navLinkBase} ${
+                isActive
+                  ? "bg-cyan-500 text-slate-950"
+                  : "bg-slate-900 text-slate-200"
+              }`
+            }
+          >
             Games
           </NavLink>
-          <NavLink to="/settings" className={({ isActive }) => `${navLinkBase} ${isActive ? "bg-cyan-500 text-slate-950" : "bg-slate-900 text-slate-200"}`}>
+
+          <NavLink
+            to="/settings"
+            className={({ isActive }) =>
+              `${navLinkBase} ${
+                isActive
+                  ? "bg-cyan-500 text-slate-950"
+                  : "bg-slate-900 text-slate-200"
+              }`
+            }
+          >
             Settings
           </NavLink>
-          <NavLink
-  to="/preferences"
-  className={({ isActive }) =>
-    `${navLinkBase} ${
-      isActive
-        ? "bg-cyan-500 text-slate-950"
-        : "bg-slate-900 text-slate-200"
-    }`
-  }
->
-  Prefs
-</NavLink>
 
+          <NavLink
+            to="/preferences"
+            className={({ isActive }) =>
+              `${navLinkBase} ${
+                isActive
+                  ? "bg-cyan-500 text-slate-950"
+                  : "bg-slate-900 text-slate-200"
+              }`
+            }
+          >
+            Prefs
+          </NavLink>
+
+          {/* ✅ ADD THIS — Testing on Mobile */}
+          <NavLink
+            to="/testing-info"
+            className={({ isActive }) =>
+              `${navLinkBase} ${
+                isActive
+                  ? "bg-cyan-500 text-slate-950"
+                  : "bg-slate-900 text-slate-200"
+              }`
+            }
+          >
+            Testing
+          </NavLink>
         </nav>
 
         {/* Routed pages */}
@@ -254,10 +373,9 @@ const App: React.FC = () => {
     <Routes>
       {/* Public */}
       <Route path="/auth/login" element={<LoginPage />} />
-<Route path="/auth/signup" element={<SignupPage />} />
-<Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
-<Route path="/auth/update-password" element={<UpdatePasswordPage />} />
-
+      <Route path="/auth/signup" element={<SignupPage />} />
+      <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/auth/update-password" element={<UpdatePasswordPage />} />
 
       {/* Protected */}
       <Route element={<AuthOnlyRoute />}>
@@ -274,7 +392,6 @@ const App: React.FC = () => {
           <Route path="/get-to-know-you" element={<GetToKnowYouPage />} />
           <Route path="/quick-reset" element={<QuickResetPage />} />
 
-
           <Route path="/lessons" element={<LessonsPage />} />
           <Route path="/smart-notes" element={<SmartNotesPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
@@ -284,7 +401,6 @@ const App: React.FC = () => {
           <Route path="/support" element={<SupportPage />} />
           <Route path="/preferences" element={<PreferencesPage />} />
 
-          {/* ⭐ ADD TESTING INFO ROUTE */}
           <Route path="/testing-info" element={<TestingInfoPage />} />
         </Route>
       </Route>
