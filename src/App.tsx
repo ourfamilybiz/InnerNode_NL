@@ -1,5 +1,5 @@
 // src/App.tsx
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Routes, Route, Navigate, Outlet, NavLink } from "react-router-dom";
 
 import { useAuth } from "./context/AuthContext";
@@ -9,6 +9,9 @@ import LoginPage from "./pages/auth/LoginPage";
 import SignupPage from "./pages/auth/SignupPage";
 import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
 import UpdatePasswordPage from "./pages/auth/UpdatePasswordPage";
+
+import PublicWelcomePage from "./pages/PublicWelcomePage";
+import WelcomeTourModal from "./components/WelcomeTourModal";
 
 import TodayPage from "./pages/TodayPage";
 import CompanionPage from "./pages/CompanionPage";
@@ -60,6 +63,19 @@ const InnerNodeShell: React.FC = () => {
     } catch (err) {
       console.error("Sign out error:", err);
     }
+  };
+
+  // ✅ Welcome Tour (shows once per browser)
+  const [showTour, setShowTour] = useState(false);
+
+  useEffect(() => {
+    const seen = localStorage.getItem("innernode_seen_nav_guide");
+    if (!seen) setShowTour(true);
+  }, []);
+
+  const closeTour = () => {
+    localStorage.setItem("innernode_seen_nav_guide", "1");
+    setShowTour(false);
   };
 
   const navLinkBase =
@@ -343,7 +359,6 @@ const InnerNodeShell: React.FC = () => {
             Prefs
           </NavLink>
 
-          {/* ✅ ADD THIS — Testing on Mobile */}
           <NavLink
             to="/testing-info"
             className={({ isActive }) =>
@@ -363,6 +378,9 @@ const InnerNodeShell: React.FC = () => {
           <Outlet />
         </main>
       </div>
+
+      {/* ✅ Render the Welcome Tour modal ONCE per browser */}
+      <WelcomeTourModal open={showTour} onClose={closeTour} />
     </div>
   );
 };
@@ -372,6 +390,7 @@ const App: React.FC = () => {
   return (
     <Routes>
       {/* Public */}
+      <Route path="/welcome" element={<PublicWelcomePage />} />
       <Route path="/auth/login" element={<LoginPage />} />
       <Route path="/auth/signup" element={<SignupPage />} />
       <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
@@ -400,7 +419,6 @@ const App: React.FC = () => {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/support" element={<SupportPage />} />
           <Route path="/preferences" element={<PreferencesPage />} />
-
           <Route path="/testing-info" element={<TestingInfoPage />} />
         </Route>
       </Route>
