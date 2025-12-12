@@ -1,12 +1,14 @@
 // src/pages/TestingInfoPage.tsx
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { useState, type ReactNode } from "react";
+import { Link, useLocation } from "react-router-dom";
+
+import FeedbackModal from "../components/FeedbackModal"; // adjust path if needed
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 type CollapsibleCardProps = {
   title: string;
   defaultOpen?: boolean;
-  children: React.ReactNode;
+  children: ReactNode;
 };
 
 const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
@@ -41,6 +43,16 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
 };
 
 const TestingInfoPage: React.FC = () => {
+  // ✅ Step 2: feedback modal state
+  const [openFeedback, setOpenFeedback] = useState(false);
+
+  // ✅ Capture current route so feedback is tagged with where the tester was
+  const location = useLocation();
+  const currentPage = location.pathname;
+
+  // Optional backup form link (leave as undefined if you don't have one)
+  const googleFormUrl = undefined; // e.g. "https://forms.gle/XXXXXX"
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 text-sm text-slate-100">
       {/* Title + intro */}
@@ -56,9 +68,7 @@ const TestingInfoPage: React.FC = () => {
 
       {/* Welcome */}
       <CollapsibleCard title="Welcome (Start Here)" defaultOpen>
-        <p>
-          This is an early preview build — not everything is finished, and that’s intentional.
-        </p>
+        <p>This is an early preview build — not everything is finished, and that’s intentional.</p>
         <p className="text-slate-300">
           InnerNode is shaped through <b>real use</b>, not perfect demos. Your honest experience —
           especially moments of confusion, friction, or surprise — helps guide what this becomes.
@@ -103,9 +113,7 @@ const TestingInfoPage: React.FC = () => {
             <ul className="list-disc pl-5 space-y-1">
               <li>Sign up, log in, and log out with email + password.</li>
               <li>Basic onboarding flow (start, terms, tier select).</li>
-              <li>
-                Main app shell: sidebar navigation on desktop + top bar + mobile tab navigation.
-              </li>
+              <li>Main app shell: sidebar navigation on desktop + top bar + mobile tab navigation.</li>
             </ul>
           </div>
 
@@ -190,9 +198,7 @@ const TestingInfoPage: React.FC = () => {
                   <li>A simple “I’m okay, just checking in.”</li>
                 </ul>
               </li>
-              <li>
-                Tell us: does it feel too generic, or does it feel like it “gets” what you meant?
-              </li>
+              <li>Tell us: does it feel too generic, or does it feel like it “gets” what you meant?</li>
             </ul>
           </div>
 
@@ -266,9 +272,7 @@ const TestingInfoPage: React.FC = () => {
 
       {/* Feedback instructions */}
       <CollapsibleCard title="How to Report Bugs, Ideas, or Confusing Moments">
-        <p>
-          When you notice something broken, weird, or really good, please send feedback with:
-        </p>
+        <p>When you notice something broken, weird, or really good, please send feedback with:</p>
         <ol className="list-decimal pl-5 space-y-1 text-slate-300">
           <li>Which page were you on? (Companion, Quick Reset, Smart Notes, Today, etc.)</li>
           <li>What were you trying to do?</li>
@@ -276,15 +280,26 @@ const TestingInfoPage: React.FC = () => {
           <li>Optional: screenshot or copy/paste of error text</li>
         </ol>
 
-        <p className="pt-2">
-          Email:{" "}
-          <span className="font-mono text-cyan-300">baggladyprofessional@gmail.com</span>{" "}
-          <br />
-          Subject: <span className="font-semibold">InnerNode Tester Feedback</span>
-        </p>
+        {/* ✅ Step 2: In-app feedback button */}
+        <div className="pt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setOpenFeedback(true)}
+            className="inline-flex items-center rounded-xl bg-cyan-500 px-4 py-2 text-xs font-semibold text-slate-950"
+          >
+            Send feedback in-app
+          </button>
 
-        <p className="text-xs text-slate-500">
-          You can also mention issues through the in-app Support section if that’s easier.
+          <a
+            href="mailto:baggladyprofessional@gmail.com?subject=InnerNode%20Tester%20Feedback"
+            className="inline-flex items-center rounded-xl border border-slate-700 px-4 py-2 text-xs text-slate-200 hover:border-cyan-400"
+          >
+            Email feedback
+          </a>
+        </div>
+
+        <p className="pt-2 text-xs text-slate-500">
+          If in-app feedback fails, email works as a backup.
         </p>
       </CollapsibleCard>
 
@@ -294,7 +309,7 @@ const TestingInfoPage: React.FC = () => {
         <ul className="list-disc pl-5 space-y-1 text-slate-300">
           <li>
             If you forget your password, use <span className="font-semibold">Forgot password</span>{" "}
-            on the login screen (if available), or email us for help during this test.
+            on the login screen.
           </li>
           <li>
             If you confirm your email and land on a strange or blank screen, try returning to the app
@@ -308,6 +323,14 @@ const TestingInfoPage: React.FC = () => {
           Because this is a soft launch, account recovery may be semi-manual. Your feedback helps us smooth it out.
         </p>
       </CollapsibleCard>
+
+      {/* ✅ Step 2: Modal render (auto-tags current page) */}
+      <FeedbackModal
+        open={openFeedback}
+        onClose={() => setOpenFeedback(false)}
+        page={currentPage}
+        googleFormUrl={googleFormUrl}
+      />
     </div>
   );
 };
