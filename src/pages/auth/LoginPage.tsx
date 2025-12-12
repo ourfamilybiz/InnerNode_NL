@@ -75,6 +75,15 @@ const LoginPage: React.FC = () => {
             {submitting ? "Signing in..." : "Sign in"}
           </button>
         </form>
+<p className="mt-2 text-[11px] text-slate-400">
+  Forgot your password?{" "}
+  <Link
+    to="/auth/forgot-password"
+    className="text-cyan-300 hover:text-cyan-200 underline"
+  >
+    Reset it here
+  </Link>
+</p>
 
         <p className="mt-4 text-xs text-slate-400">
           Don&apos;t have an account?{" "}

@@ -54,7 +54,9 @@ export type TriggerClassification = {
  *      - more detailed trigger phrase mapping
  *      - or a lightweight ML / LLM call.
  */
-export function classifyTriggers(rawText: string): TriggerClassification {
+export function classifyEqualizerInput(
+  rawText: string
+): TriggerClassification {
   const text = (rawText || "").toLowerCase();
 
   let emotionCluster: EmotionCluster = "unknown";
@@ -81,7 +83,7 @@ export function classifyTriggers(rawText: string): TriggerClassification {
 
   // fear / anxiety / overwhelm
   if (
-    /scared|afraid|anxious|anxiety|panic|overwhelmed|can't breathe|on edge/.test(
+    /scared|afraid|anxious|anxiety|panic|overwhelmed|can't breathe|can’t breathe|on edge/.test(
       text
     )
   ) {
@@ -151,9 +153,7 @@ export function classifyTriggers(rawText: string): TriggerClassification {
     flags.mentionsEmergencyWords = true;
   }
 
-  // --- rough escalation logic ---
-  // These rules are conservative; other chat can refine into a full table.
-
+  // --- rough escalation logic --- //
   if (flags.mentionsSelfHarm || flags.mentionsWeapon) {
     escalationLevel = 3;
     impulseType =

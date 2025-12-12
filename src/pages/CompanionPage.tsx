@@ -3,6 +3,7 @@ import React, { useMemo, useRef, useState } from "react";
 import { useUserProfile } from "../hooks/useUserProfile";
 import { getCompanionReply } from "../lib/companionBrain";
 import { speakText } from "../lib/voice";
+import { useAuth } from "../context/AuthContext";
 
 // Simple in-page chat message type
 type SimpleChatMessage = {
@@ -16,6 +17,7 @@ type ChatMessage = SimpleChatMessage & {
 
 const CompanionPage: React.FC = () => {
   const { profile } = useUserProfile();
+  const { user } = useAuth(); // ✅ added (so we can pass userId to the brain)
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -52,7 +54,9 @@ const CompanionPage: React.FC = () => {
   const avatarRole = "Motivational Coach";
 
   // Figure out last assistant message (for subtle UI hints)
-  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+  const lastAssistant = [...messages]
+    .reverse()
+    .find((m) => m.role === "assistant");
 
   // Status line for the “call window”
   let callStatus = "Connected";
@@ -73,8 +77,7 @@ const CompanionPage: React.FC = () => {
     }
 
     const SpeechRecognition =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
       setError(
@@ -143,8 +146,10 @@ const CompanionPage: React.FC = () => {
         (m) => ({ role: m.role, content: m.content })
       );
 
+      // ✅ pass userId so the brain layer can fetch preferences + onboarding answers
       const replyText = await getCompanionReply(historyForBrain, {
         tier,
+        userId: user?.id ?? null,
       });
 
       const assistantMessage: ChatMessage = {
@@ -159,9 +164,7 @@ const CompanionPage: React.FC = () => {
       speakText(replyText);
     } catch (err) {
       console.error("[Companion] error:", err);
-      setError(
-        "Something glitched while generating a reply. Try again in a moment."
-      );
+      setError("Something glitched while generating a reply. Try again in a moment.");
     } finally {
       setSending(false);
     }
@@ -178,9 +181,7 @@ const CompanionPage: React.FC = () => {
     <div className="flex flex-col h-full max-w-3xl mx-auto space-y-4">
       {/* Header */}
       <header className="border-b border-slate-800 pb-3">
-        <h1 className="text-xl font-semibold text-cyan-300">
-          InnerNode Companion
-        </h1>
+        <h1 className="text-xl font-semibold text-cyan-300">InnerNode Companion</h1>
         <p className="text-xs text-slate-400">
           A private space to say the thing you don&apos;t say out loud.
         </p>
@@ -211,26 +212,17 @@ const CompanionPage: React.FC = () => {
         {/* Avatar visual box */}
         <div className="flex items-center justify-center">
           <div className="relative h-24 w-32 sm:h-28 sm:w-40 rounded-2xl bg-gradient-to-br from-cyan-500/30 via-blue-600/30 to-slate-900 border border-cyan-500/40 shadow-lg shadow-cyan-500/40 overflow-hidden flex items-center justify-center">
-            {/* Placeholder for static portrait / animated avatar */}
             <div className="h-14 w-14 rounded-full bg-slate-950/80 border border-cyan-400 flex items-center justify-center">
-              <span className="text-sm font-semibold text-cyan-200">
-                AI
-              </span>
+              <span className="text-sm font-semibold text-cyan-200">AI</span>
             </div>
-            {/* Status dot in the corner */}
+
             <div className="absolute top-2 left-2 flex items-center gap-1">
               <span
                 className={`h-2 w-2 rounded-full ${
-                  listening
-                    ? "bg-rose-400"
-                    : sending
-                    ? "bg-amber-400"
-                    : "bg-emerald-400"
+                  listening ? "bg-rose-400" : sending ? "bg-amber-400" : "bg-emerald-400"
                 }`}
               />
-              <span className="text-[10px] text-slate-100">
-                {callStatus}
-              </span>
+              <span className="text-[10px] text-slate-100">{callStatus}</span>
             </div>
           </div>
         </div>
@@ -240,17 +232,15 @@ const CompanionPage: React.FC = () => {
           <div className="font-semibold text-[12px] text-slate-100">
             You&apos;re with: <span className="text-cyan-200">{avatarName}</span>
           </div>
-          <div className="text-[11px] text-slate-400">
-            Role: {avatarRole}
-          </div>
+          <div className="text-[11px] text-slate-400">Role: {avatarRole}</div>
           <p className="text-[11px] text-slate-400">
-            This is your steady Companion window. Over time, this box can show
-            a static portrait, subtle breathing animation, or short “speaking”
-            loops while replies play out loud.
+            This is your steady Companion window. Over time, this box can show a static
+            portrait, subtle breathing animation, or short “speaking” loops while replies
+            play out loud.
           </p>
           <p className="text-[11px] text-slate-500">
-            Try speaking or typing below — Aria will respond in both text and
-            voice, and this call window will stay present as your anchor.
+            Try speaking or typing below — Aria will respond in both text and voice, and
+            this call window will stay present as your anchor.
           </p>
         </div>
       </section>
@@ -260,9 +250,7 @@ const CompanionPage: React.FC = () => {
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={
-              msg.role === "user" ? "flex justify-end" : "flex justify-start"
-            }
+            className={msg.role === "user" ? "flex justify-end" : "flex justify-start"}
           >
             <div
               className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm leading-relaxed ${
@@ -287,8 +275,8 @@ const CompanionPage: React.FC = () => {
 
         {messages.length === 0 && !sending && (
           <p className="text-xs text-slate-500">
-            Start by telling InnerNode what&apos;s bothering you, what you&apos;re
-            excited about, or what you don&apos;t have words for yet.
+            Start by telling InnerNode what&apos;s bothering you, what you&apos;re excited
+            about, or what you&apos;re struggling to name.
           </p>
         )}
       </div>
@@ -337,8 +325,8 @@ const CompanionPage: React.FC = () => {
           </div>
         </div>
         <p className="text-[10px] text-slate-500">
-          Tap the mic once to start, again to stop. You can edit the text before
-          you send it.
+          Tap the mic once to start, again to stop. You can edit the text before you
+          send it.
         </p>
       </div>
     </div>
@@ -346,3 +334,4 @@ const CompanionPage: React.FC = () => {
 };
 
 export default CompanionPage;
+

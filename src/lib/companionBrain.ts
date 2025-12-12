@@ -1,9 +1,6 @@
 // src/lib/companionBrain.ts
-
-import {
-  callInnerNodeChat,
-  type InnerNodeMessage,
-} from "./innernodeAiClient";
+import { callInnerNodeChat, type InnerNodeMessage } from "./innernodeAiClient";
+import { getUserPreferencesForAI } from "./innernodeAiClient";
 
 export type CompanionTier = "free" | "plus" | "pro" | "preview";
 
@@ -14,6 +11,7 @@ type SimpleChatMessage = {
 
 export type CompanionBrainOptions = {
   tier: CompanionTier;
+  userId?: string | null; // ✅ added
 };
 
 /**
@@ -36,8 +34,6 @@ export async function getCompanionReply(
   let messagesForModel: InnerNodeMessage[];
 
   if (trimmedHistory.length === 0) {
-    // Safety fallback: if somehow called with no history,
-    // send a simple opener so the model has context.
     messagesForModel = [
       {
         role: "user",
@@ -52,10 +48,24 @@ export async function getCompanionReply(
     }));
   }
 
+  // ✅ Pull preferences (Get-To-Know-You) for the AI
+  // If userId is missing (not signed in), preferences stays null and it still works.
+  let preferences: any = null;
+  try {
+    if (options?.userId) {
+      preferences = await getUserPreferencesForAI(options.userId);
+    }
+  } catch (e) {
+    console.warn("[CompanionBrain] Could not load preferences:", e);
+    preferences = null;
+  }
+
   const result = await callInnerNodeChat(messagesForModel, {
     modelHint: "companion",
+    preferences, // ✅ added
   });
 
   return result.content;
 }
+
 

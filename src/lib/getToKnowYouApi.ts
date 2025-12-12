@@ -24,20 +24,21 @@ export async function fetchGetToKnowYouAnswers(userId: string) {
 
   const map: Record<string, string> = {};
   for (const row of data ?? []) {
-    if ((row as any).question_id) {
-      const qid = (row as any).question_id as string;
-      const text = (row as any).answer_text as string | null;
-      map[qid] = text ?? "";
-    }
+    // row is typed by Supabase as any-ish, but we selected these fields explicitly:
+    const qid = (row as { question_id?: string }).question_id;
+    if (!qid) continue;
+
+    const text = (row as { answer_text?: string | null }).answer_text ?? "";
+    map[qid] = text;
   }
 
-  return map;
+  return map; // Record<question_id, answer_text>
 }
 
 export type SaveGetToKnowYouPayload = {
   question_id: string;
   answer_text: string;
-  answer_mode?: string;
+  answer_mode?: string; // optional for future use
 };
 
 export async function saveGetToKnowYouAnswers(
@@ -46,16 +47,26 @@ export async function saveGetToKnowYouAnswers(
 ) {
   if (!payload.length) return;
 
-  // Only use fields we are sure exist in the table
+  // Store only fields we’re sure exist
   const rows = payload.map((item) => ({
     user_id: userId,
     question_id: item.question_id,
     answer_text: item.answer_text,
+    // If you add the column later, you can safely enable this:
+    // answer_mode: item.answer_mode ?? null,
   }));
 
+  /**
+   * IMPORTANT:
+   * This requires a UNIQUE constraint on (user_id, question_id) in Supabase.
+   * Example:
+   *   ALTER TABLE public.get_to_know_you_answers
+   *   ADD CONSTRAINT get_to_know_you_answers_user_question_unique
+   *   UNIQUE (user_id, question_id);
+   */
   const { error } = await supabase
     .from("get_to_know_you_answers")
-    .upsert(rows); // let Supabase pick the conflict target
+    .upsert(rows, { onConflict: "user_id,question_id" });
 
   if (error) {
     console.error("Error saving get-to-know-you answers:", error);

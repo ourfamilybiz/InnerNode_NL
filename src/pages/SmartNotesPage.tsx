@@ -1,408 +1,377 @@
 // src/pages/SmartNotesPage.tsx
 import React, { useEffect, useRef, useState } from "react";
-import { useAuth } from "../context/AuthContext";
-import { useUserProfile } from "../hooks/useUserProfile";
-import { supabase } from "../lib/supabaseClient";
-import { speakText } from "../lib/voice";
+
+import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/context/AuthContext";
+
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 
 type SmartNote = {
   id: string;
-  title: string;
-  body: string;
-  created_at?: string;
-  source: "cloud" | "local";
+  user_id: string;
+  title: string | null;
+  body: string | null;
+  note_type: string | null;
+  priority: string | null;
+  status: string | null;
+  due_at: string | null;
+  tags: string[] | null;
+  created_at: string;
 };
 
 const SmartNotesPage: React.FC = () => {
   const { user } = useAuth();
-  const { profile } = useUserProfile();
 
   const [notes, setNotes] = useState<SmartNote[]>([]);
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [cloudDisabled, setCloudDisabled] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Voice input state
-  const [listening, setListening] = useState(false);
+  // New note form state
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [noteType, setNoteType] = useState<"idea" | "task" | "journal" | "other">(
+    "idea"
+  );
+  const [priority, setPriority] = useState<"low" | "medium" | "high">("low");
+  const [dueAt, setDueAt] = useState<string>("");
+
+  // --- Voice input state ---
+  const [isRecording, setIsRecording] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(false);
   const recognitionRef = useRef<any | null>(null);
 
-  const rawTier = profile?.plan_tier?.toLowerCase() ?? "free";
+  // Check browser support for SpeechRecognition
+  useEffect(() => {
+    if (typeof window === "undefined") return;
 
-  // Soft caps per tier (to keep Supabase costs predictable later)
-  const maxNotesForTier = rawTier === "pro" ? 500 : rawTier === "plus" ? 200 : 50;
+    const AnyWindow = window as any;
+    const SpeechRecognition =
+      AnyWindow.SpeechRecognition || AnyWindow.webkitSpeechRecognition;
 
-  const handleLoadNotes = async () => {
-    if (!user || cloudDisabled) return;
+    if (SpeechRecognition) {
+      setVoiceSupported(true);
+      const recognition = new SpeechRecognition();
+      recognition.lang = "en-US";
+      recognition.continuous = false;
+      recognition.interimResults = true;
 
-    setLoading(true);
-    setError(null);
+      recognition.onresult = (event: any) => {
+        const result = event.results[event.resultIndex];
 
-    try {
-      const { data, error: loadError } = await supabase
-        .from("smart_notes")
-        .select("id, title, body, created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
+        // Only save the final transcript, not interim versions
+        if (result.isFinal) {
+          const transcript = result[0].transcript.trim();
+          if (transcript.length > 0) {
+            setBody((prev) => (prev ? `${prev} ${transcript}` : transcript));
+          }
+        }
+      };
 
-      if (loadError) {
-        console.error("[SmartNotes] load error:", loadError);
-        setCloudDisabled(true);
-        setError(
-          "Cloud sync for Smart Notes isn’t fully set up yet. You can still create notes for this session."
-        );
-        setLoading(false);
-        return;
-      }
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
 
-      const mapped: SmartNote[] =
-        (data ?? []).map((row: any) => ({
-          id: row.id,
-          title: row.title ?? "",
-          body: row.body ?? "",
-          created_at: row.created_at ?? undefined,
-          source: "cloud",
-        })) ?? [];
+      recognition.onerror = () => {
+        setIsRecording(false);
+      };
 
-      setNotes(mapped);
-    } catch (err) {
-      console.error("[SmartNotes] unexpected load error:", err);
-      setCloudDisabled(true);
-      setError(
-        "Cloud sync for Smart Notes isn’t fully ready. Notes you make now will stay local until we finish setup."
-      );
-    } finally {
-      setLoading(false);
+      recognitionRef.current = recognition;
+    } else {
+      setVoiceSupported(false);
+    }
+  }, []);
+
+  const toggleRecording = () => {
+    if (!voiceSupported || !recognitionRef.current) return;
+
+    if (isRecording) {
+      recognitionRef.current.stop();
+      setIsRecording(false);
+    } else {
+      setError(null);
+      setIsRecording(true);
+      recognitionRef.current.start();
     }
   };
 
+  // --- Load notes for current user ---
   useEffect(() => {
-    handleLoadNotes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+    if (!user) return;
+
+    const fetchNotes = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const { data, error: dbError } = await supabase
+          .from("smart_notes")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false });
+
+        if (dbError) throw dbError;
+        setNotes((data ?? []) as SmartNote[]);
+      } catch (err: any) {
+        console.error("[SmartNotes] fetch error:", err);
+        setError("Could not load your notes right now.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNotes();
+  }, [user]);
 
   const handleSaveNote = async () => {
-    if (!title.trim() && !body.trim()) return;
+    // 🔍 Debug: see who the app thinks you are
+    console.log("[SmartNotes] current user:", user);
 
-    if (notes.length >= maxNotesForTier) {
-      setError(
-        "You’ve reached the Smart Notes limit for this tier. You can delete older notes or upgrade later for more space."
-      );
+    if (!user) {
+      setError("You must be logged in to save notes.");
       return;
     }
 
-    setError(null);
-
-    const newNote: SmartNote = {
-      id: `local-${Date.now()}`,
-      title: title.trim() || "Untitled note",
-      body: body.trim(),
-      created_at: new Date().toISOString(),
-      source: cloudDisabled ? "local" : "cloud",
-    };
-
-    // Optimistic: show immediately
-    setNotes((prev) => [newNote, ...prev]);
-    setTitle("");
-    setBody("");
-    setSaving(true);
-
-    if (!user || cloudDisabled) {
-      setSaving(false);
+    if (!body.trim() && !title.trim()) {
+      setError("Say or type something for this note first.");
       return;
     }
 
     try {
-      const { data, error: insertError } = await supabase
+      setSaving(true);
+      setError(null);
+
+      const payload = {
+        user_id: user.id,
+        title: title.trim() || null,
+        body: body.trim() || null,
+        note_type: noteType,
+        priority,
+        status: "open",
+        due_at: dueAt ? new Date(dueAt).toISOString() : null,
+        tags: null as string[] | null,
+      };
+
+      const { data, error: dbError } = await supabase
         .from("smart_notes")
-        .insert({
-          user_id: user.id,
-          title: newNote.title,
-          body: newNote.body,
-        })
-        .select("id, created_at")
+        .insert([payload])
+        .select("*")
         .single();
 
-      if (insertError) {
-        console.error("[SmartNotes] save error:", insertError);
-        setCloudDisabled(true);
-        setError(
-          "Note saved locally, but cloud sync isn’t ready yet. You can still copy important notes somewhere safe."
-        );
-        setSaving(false);
-        return;
-      }
+      if (dbError) throw dbError;
 
-      // Replace the local note with the real DB id
-      setNotes((prev) =>
-        prev.map((n) =>
-          n.id === newNote.id
-            ? {
-                ...n,
-                id: data.id,
-                created_at: data.created_at ?? n.created_at,
-                source: "cloud",
-              }
-            : n
-        )
-      );
-    } catch (err) {
-      console.error("[SmartNotes] unexpected save error:", err);
-      setCloudDisabled(true);
+      setNotes((prev) => [data as SmartNote, ...prev]);
+
+      // clear the form
+      setTitle("");
+      setBody("");
+      setNoteType("idea");
+      setPriority("low");
+      setDueAt("");
+    } catch (err: any) {
+      console.error("[SmartNotes] save error raw:", err);
+      if (err?.message) console.error("[SmartNotes] message:", err.message);
+      if (err?.code) console.error("[SmartNotes] code:", err.code);
+      if (err?.details) console.error("[SmartNotes] details:", err.details);
+
       setError(
-        "Note saved locally, but cloud sync had an issue. We’ll hook this up fully during the next setup pass."
+        err?.message ?? "Could not save that note. Try again in a moment."
       );
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleDeleteNote = async (id: string, source: "cloud" | "local") => {
-    // Remove immediately from UI
-    setNotes((prev) => prev.filter((n) => n.id !== id));
-
-    if (source === "local" || !user || cloudDisabled) return;
-
-    try {
-      const { error: deleteError } = await supabase
-        .from("smart_notes")
-        .delete()
-        .eq("id", id)
-        .eq("user_id", user.id);
-
-      if (deleteError) {
-        console.error("[SmartNotes] delete error:", deleteError);
-        // We already removed it from the UI; no need to scare the user.
-      }
-    } catch (err) {
-      console.error("[SmartNotes] unexpected delete error:", err);
-    }
-  };
-
-  // ---- Voice input (dictate a note) ----
-  const handleMicClick = () => {
-    if (listening && recognitionRef.current) {
-      recognitionRef.current.stop();
-      return;
-    }
-
-    const SpeechRecognition =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      setError(
-        "Voice input for Smart Notes isn’t supported in this browser yet. You can still type your notes."
-      );
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognitionRef.current = recognition;
-
-    recognition.lang = "en-US";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => {
-      setError(null);
-      setListening(true);
-    };
-
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript as string;
-      setBody((prev) => (prev ? `${prev} ${transcript}` : transcript));
-    };
-
-    recognition.onerror = (event: any) => {
-      console.error("[SmartNotes voice] error:", event);
-      setError(
-        "Smart Notes couldn’t capture your voice that time. Try again or use typing if it keeps happening."
-      );
-    };
-
-    recognition.onend = () => {
-      setListening(false);
-    };
-
-    recognition.start();
   };
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="flex flex-col gap-4 max-w-5xl mx-auto h-full">
       {/* Header */}
-      <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-cyan-300">
-          Life Logistics · Smart Notes
-        </h1>
-        <p className="text-sm text-slate-400 max-w-3xl">
-          A calm place to park the “don&apos;t forget this” stuff — calls to make,
-          forms to file, money moves, errands, and little life admin thoughts that
-          crowd your head when you&apos;re already tired.
-        </p>
-        <p className="text-[11px] text-slate-500">
-          These aren&apos;t deep therapy journals — they&apos;re practical notes your
-          future self will thank you for. You can speak or type them.
+      <header className="border-b border-slate-800 pb-3">
+        <h1 className="text-xl font-semibold text-cyan-300">Smart Notes</h1>
+        <p className="text-xs text-slate-400">
+          Capture what’s in your head in plain language. Speak or type, and
+          InnerNode will keep it organized for later.
         </p>
       </header>
 
-      {/* Error or cloud info */}
+      {/* Error */}
       {error && (
         <div className="rounded-xl border border-amber-500/60 bg-amber-950/40 px-3 py-2 text-[11px] text-amber-100">
           {error}
         </div>
       )}
-      {cloudDisabled && !error && (
-        <div className="rounded-xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-[11px] text-slate-300">
-          Cloud sync for Smart Notes will be wired up fully later. Right now,
-          your notes live in this browser session. You can still copy anything
-          important into Companion or elsewhere.
-        </div>
-      )}
 
-      {/* Composer */}
-      <section className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <h2 className="text-sm font-semibold text-slate-100">
-              Capture a new note
-            </h2>
-            <p className="text-xs text-slate-400">
-              Think: “call the doctor,” “ask HR about…,” “set up payment plan,”
-              “renew tag,” “remember to send this email,” etc.
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] h-full">
+        {/* Left: new note composer */}
+        <Card className="bg-slate-950/70 border-slate-800 flex flex-col">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm text-slate-100">
+              New Smart Note
+            </CardTitle>
+            <p className="text-[11px] text-slate-500">
+              Speak your note, type details, then save. Later we can route
+              this into tasks, reminders, or lesson prompts.
             </p>
-          </div>
-          <div className="text-[11px] text-slate-500">
-            Notes used:{" "}
-            <span className="text-cyan-300">
-              {notes.length} / {maxNotesForTier}
-            </span>
-          </div>
-        </div>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 flex-1">
+            <Input
+              placeholder="Short title (optional)"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="text-sm"
+            />
 
-        <input
-          type="text"
-          className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-cyan-400"
-          placeholder="Short title (e.g., Call credit card company about late fee)"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                <span>Note body</span>
+                {voiceSupported ? (
+                  <button
+                    type="button"
+                    onClick={toggleRecording}
+                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] border ${
+                      isRecording
+                        ? "border-rose-500/70 bg-rose-500/10 text-rose-200"
+                        : "border-slate-600 bg-slate-900 text-slate-300 hover:border-cyan-400 hover:text-cyan-200"
+                    }`}
+                  >
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-current" />
+                    {isRecording ? "Listening… tap to stop" : "Tap mic to speak"}
+                  </button>
+                ) : (
+                  <span className="text-[10px] text-slate-500">
+                    Voice capture not supported in this browser.
+                  </span>
+                )}
+              </div>
+              <Textarea
+                rows={5}
+                placeholder="Say it like you’d text a friend. Your words will be saved exactly as they come out."
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                className="text-sm"
+              />
+            </div>
 
-        <div className="flex gap-2">
-          <textarea
-            rows={3}
-            className="flex-1 rounded-xl border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-cyan-400"
-            placeholder="Details, reference numbers, what you want to say, or anything else that will help you handle this later."
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-          />
-          <div className="flex flex-col gap-2 self-end">
-            <button
-              type="button"
-              onClick={handleMicClick}
-              className={`rounded-xl border px-3 py-1.5 text-[11px] font-medium ${
-                listening
-                  ? "border-rose-400 bg-rose-500/20 text-rose-100"
-                  : "border-slate-700 bg-slate-950/70 text-slate-200 hover:border-cyan-400 hover:text-cyan-100"
-              }`}
-            >
-              {listening ? "Listening…" : "Dictate"}
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveNote}
-              disabled={saving || (!title.trim() && !body.trim())}
-              className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-md shadow-cyan-500/40 disabled:opacity-60"
-            >
-              {saving ? "Saving…" : "Save note"}
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* Notes list */}
-      <section className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-slate-100">
-            Your Smart Notes
-          </h2>
-          {loading && (
-            <span className="text-[11px] text-slate-400">Loading…</span>
-          )}
-        </div>
-
-        {notes.length === 0 && !loading ? (
-          <p className="text-xs text-slate-500">
-            No notes yet. Think of one thing that&apos;s been sitting in the back
-            of your mind and drop it here so your brain can breathe.
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {notes.map((note) => {
-              const createdLabel = note.created_at
-                ? new Date(note.created_at).toLocaleString([], {
-                    month: "short",
-                    day: "2-digit",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                : "";
-
-              return (
-                <li
-                  key={note.id}
-                  className="rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 text-xs text-slate-100"
+            <div className="grid grid-cols-2 gap-3 text-[11px] text-slate-300">
+              <div className="space-y-1">
+                <label className="block">Note type</label>
+                <select
+                  value={noteType}
+                  onChange={(e) => setNoteType(e.target.value as any)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950/80 px-2 py-1 text-xs"
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <div className="font-semibold text-[12px]">
-                        {note.title}
-                      </div>
-                      {createdLabel && (
-                        <div className="text-[11px] text-slate-500">
-                          {createdLabel}{" "}
-                          {note.source === "local" && "· local only"}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {note.body && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            speakText(`${note.title}. ${note.body}`)
-                          }
-                          className="rounded-full border border-slate-700 px-2 py-1 text-[11px] text-slate-200 hover:border-cyan-400 hover:text-cyan-100"
-                          title="Hear this note"
-                        >
-                          🔊
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleDeleteNote(note.id, note.source)
-                        }
-                        className="rounded-full border border-slate-700 px-2 py-1 text-[11px] text-slate-300 hover:border-rose-400 hover:text-rose-200"
-                        title="Delete note"
-                      >
-                        ✕
-                      </button>
-                    </div>
+                  <option value="idea">Idea / Brain dump</option>
+                  <option value="task">Task / Follow-up</option>
+                  <option value="journal">Journal / Feelings</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block">Priority</label>
+                <select
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value as any)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950/80 px-2 py-1 text-xs"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </div>
+
+              <div className="space-y-1 col-span-2">
+                <label className="block">
+                  Optional reminder date (for later features)
+                </label>
+                <Input
+                  type="datetime-local"
+                  value={dueAt}
+                  onChange={(e) => setDueAt(e.target.value)}
+                  className="text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <Button
+                type="button"
+                onClick={handleSaveNote}
+                disabled={saving}
+                className="text-sm"
+              >
+                {saving ? "Saving…" : "Save Smart Note"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Right: recent notes list */}
+        <Card className="bg-slate-950/70 border-slate-800 flex flex-col h-full">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm text-slate-100">
+              Recent Notes
+            </CardTitle>
+            <p className="text-[11px] text-slate-500">
+              The latest things you’ve captured, newest first.
+            </p>
+          </CardHeader>
+          <CardContent className="flex-1 overflow-y-auto space-y-2 pr-1">
+            {loading && (
+              <p className="text-[11px] text-slate-400">
+                Loading your notes…
+              </p>
+            )}
+
+            {!loading && notes.length === 0 && (
+              <p className="text-[11px] text-slate-500">
+                No Smart Notes yet. Try speaking one into the mic or typing it
+                on the left.
+              </p>
+            )}
+
+            {notes.map((note) => (
+              <div
+                key={note.id}
+                className="rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-2 text-xs space-y-1"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-medium text-slate-100 truncate">
+                    {note.title || "(Untitled note)"}
                   </div>
-                  {note.body && (
-                    <p className="mt-1 text-[11px] text-slate-200 whitespace-pre-wrap">
-                      {note.body}
-                    </p>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+                  <div className="flex gap-1 text-[10px] text-slate-400">
+                    {note.note_type && (
+                      <span className="rounded-full border border-slate-700 px-2 py-0.5">
+                        {note.note_type}
+                      </span>
+                    )}
+                    {note.priority && (
+                      <span className="rounded-full border border-slate-700 px-2 py-0.5">
+                        {note.priority}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {note.body && (
+                  <p className="text-[11px] text-slate-200 whitespace-pre-wrap">
+                    {note.body}
+                  </p>
+                )}
+                <div className="text-[10px] text-slate-500">
+                  {new Date(note.created_at).toLocaleString()}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };
